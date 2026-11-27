@@ -1,4 +1,4 @@
-import { Room, capacity, cleanName, colors, width, height, position } from './room.js?v=2';
+import { Room, capacity, cleanName, colors, width, height, position } from './room.js?v=3';
 
 const byId = id => document.getElementById(id);
 const canvas = byId('field');
@@ -45,8 +45,10 @@ function clearInvite() {
   byId('offer').hidden = true;
   byId('invite-code').value = '';
   byId('reply-in').value = '';
+  byId('reply-in').readOnly = false;
   byId('accept').disabled = false;
   byId('cancel-invite').disabled = false;
+  byId('cancel-invite').textContent = 'Cancel invite';
   byId('invite').disabled = false;
 }
 
@@ -58,16 +60,17 @@ function reset(message) {
       setMode('guest');
       setStatus('Connected to the room.');
     } else if (joined && mode === 'host') {
+      if (room.players.has(inviteId)) clearInvite();
       setStatus('Guest connected. Create another invite to add a friend.');
     }
     renderRoster();
   }, (lostHost, id, wasPlaying) => {
     if (lostHost) {
-      reset(wasPlaying ? 'The connection to the host ended.' : 'Could not reach the host. Try the same Wi-Fi and ask for a fresh invite.');
+      reset(wasPlaying ? 'The connection to the host ended.' : 'The browser could not connect to the host. Return to the game and ask for a fresh invite.');
       return;
     }
     if (id === inviteId) clearInvite();
-    setStatus(wasPlaying ? 'A guest left the room.' : 'Could not reach the guest. Try the same Wi-Fi and make a fresh invite.');
+    setStatus(wasPlaying ? 'A guest left the room.' : 'The browser could not connect. Ask your guest to return to the game, then create a fresh invite.');
     renderRoster();
   });
   clearInvite();
@@ -75,6 +78,8 @@ function reset(message) {
   byId('offer-in').readOnly = false;
   byId('reply-code').value = '';
   byId('answer').hidden = true;
+  byId('reply').hidden = false;
+  byId('reply').textContent = 'Generate reply';
   byId('reply').disabled = false;
   setMode('solo');
   setStatus(message);
@@ -84,6 +89,7 @@ function reset(message) {
 function showJoin(invite = '') {
   setMode('join');
   byId('offer-in').value = invite;
+  byId('offer-entry').hidden = Boolean(invite);
   setStatus(invite ? 'Choose a display name and generate a reply.' : 'Paste an invite link from the host to join.');
 }
 
@@ -139,8 +145,10 @@ byId('accept').addEventListener('click', async () => {
   try {
     await activeRoom.accept(id, byId('reply-in').value);
     if (room !== activeRoom || inviteId !== id) return;
-    clearInvite();
-    if (!activeRoom.players.has(id)) setStatus('Connecting to your guest…');
+    byId('reply-in').readOnly = true;
+    byId('cancel-invite').disabled = false;
+    byId('cancel-invite').textContent = 'Cancel connection';
+    setStatus('Connecting. Ask your friend to return to the game tab after sending their reply.');
   } catch (error) {
     if (room !== activeRoom || inviteId !== id) return;
     byId('accept').disabled = false;
@@ -151,8 +159,11 @@ byId('accept').addEventListener('click', async () => {
 
 byId('reply').addEventListener('click', async () => {
   const activeRoom = room;
+  nameInput.blur();
+  byId('offer-in').blur();
   byId('reply').disabled = true;
   byId('offer-in').readOnly = true;
+  byId('reply').textContent = 'Generating reply…';
   setMode('join');
   setStatus('Preparing your reply. This can take a few seconds.');
   try {
@@ -160,13 +171,16 @@ byId('reply').addEventListener('click', async () => {
     if (room !== activeRoom || mode !== 'join') return;
     byId('reply-code').value = token;
     byId('answer').hidden = false;
-    setStatus('Send the reply code back to the host. Keep this tab open while they connect you.');
+    byId('reply').hidden = true;
+    setStatus('Copy the reply, send it to the host, then come back to this tab.');
   } catch (error) {
     if (room !== activeRoom) return;
     byId('reply').disabled = false;
     byId('offer-in').readOnly = false;
     setMode('join');
     setStatus(error.message);
+  } finally {
+    if (activeRoom === room) byId('reply').textContent = 'Generate reply';
   }
 });
 
@@ -175,7 +189,7 @@ for (const [buttonId, fieldId] of [['copy-invite', 'invite-code'], ['copy-reply'
     const field = byId(fieldId);
     try {
       await navigator.clipboard.writeText(field.value);
-      setStatus(buttonId === 'copy-invite' ? 'Invite copied. Send it to one friend.' : 'Reply copied. Send it back to the host.');
+      setStatus(buttonId === 'copy-invite' ? 'Invite copied. Send it to one friend.' : 'Reply copied. Send it to the host, then come back to this tab.');
     } catch {
       field.focus();
       field.select();

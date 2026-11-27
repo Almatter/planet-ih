@@ -7,7 +7,7 @@ Planet IH is a browser multiplayer prototype for [Isekai Hell](https://github.co
 1. On the game page, enter a display name and choose **Host room**, then **Create invite**.
 2. Send the invite link privately to one friend. They open it in their browser, enter a name, and select **Generate reply**.
 3. Have them send the reply code back. Paste it into the host page and choose **Connect guest**.
-4. Create a fresh invite for each additional friend. Keep the host tab open for the life of the room. On a phone, open the invite in Safari or Chrome and return to the game after sending the reply.
+4. Create a fresh invite for each additional friend. Keep the host tab open for the life of the room. On a phone, the join controls appear above the field. Open the invite in Safari or Chrome and return to the game after sending the reply. Planet IH has no countdown for swapping codes, though mobile browsers can still suspend or discard a tab left in the background.
 
 ## Run locally
 

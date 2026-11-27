@@ -3,6 +3,7 @@ const plainPrefix = 'planet-ih-1.';
 const compactPrefix = 'planet-ih-2.';
 const maxSignalSize = 50000;
 const playbackDelay = 110;
+const gatheringLimit = 30000;
 export const colors = ['#baf592', '#ffc375', '#74ddf6', '#f995bd', '#c7afff', '#f8e979', '#6ff0ce', '#ff927e'];
 export const capacity = colors.length;
 export const width = 720;
@@ -82,9 +83,22 @@ function gather(connection) {
     const check = () => {
       if (connection.iceGatheringState === 'complete' || connection.signalingState === 'closed') finish();
     };
-    const timer = setTimeout(finish, 12000);
+    const timer = setTimeout(finish, gatheringLimit);
     connection.addEventListener('icegatheringstatechange', check);
   });
+}
+
+function exchangeDescription({ type, sdp }) {
+  // A peer may have to wait for its partner to return from chat before ICE can connect.
+  return { type, sdp: sdp.replace(/^a=end-of-candidates(?:\r?\n|$)/gm, '') };
+}
+
+function localSignal(connection) {
+  const description = exchangeDescription(connection.localDescription);
+  if (!/^a=candidate:/m.test(description.sdp)) {
+    throw new Error('The browser could not prepare a network route. Stay on this tab and try again.');
+  }
+  return description;
 }
 
 function send(channel, packet) {
@@ -133,7 +147,7 @@ export class Room {
   }
 
   makePeer(id) {
-    if (!globalThis.RTCPeerConnection || !crypto.randomUUID) {
+    if (!globalThis.RTCPeerConnection) {
       throw new Error('Multiplayer needs a current browser on HTTPS or localhost.');
     }
     const connection = new RTCPeerConnection({ iceServers });
@@ -147,6 +161,7 @@ export class Room {
   async offer() {
     if (this.guests.size >= capacity - 1) throw new Error('This room is full.');
     const id = globalThis.crypto?.randomUUID?.();
+    if (!id) throw new Error('Hosting needs a current browser on HTTPS or localhost.');
     const peer = this.makePeer(id);
     this.guests.set(id, peer);
     try {
@@ -154,7 +169,7 @@ export class Room {
       await peer.connection.setLocalDescription(await peer.connection.createOffer());
       await gather(peer.connection);
       if (!this.guests.has(id)) throw new Error('Invite canceled.');
-      const token = await encode(id, peer.connection.localDescription);
+      const token = await encode(id, localSignal(peer.connection));
       return { id, token };
     } catch (error) {
       this.drop(peer);
@@ -166,10 +181,7 @@ export class Room {
     const reply = await decode(input, 'answer');
     const peer = this.guests.get(id);
     if (!peer || reply.id !== id) throw new Error('That reply belongs to a different invite.');
-    await peer.connection.setRemoteDescription({ type: reply.type, sdp: reply.sdp });
-    if (this.guests.has(id) && peer.channel.readyState !== 'open') {
-      peer.timer = setTimeout(() => this.drop(peer, true), 30000);
-    }
+    await peer.connection.setRemoteDescription(exchangeDescription(reply));
   }
 
   async answer(input) {
@@ -180,11 +192,11 @@ export class Room {
     const { connection } = peer;
     connection.addEventListener('datachannel', ({ channel }) => this.bind(peer, channel, false), { once: true });
     try {
-      await connection.setRemoteDescription({ type: offer.type, sdp: offer.sdp });
+      await connection.setRemoteDescription(exchangeDescription(offer));
       await connection.setLocalDescription(await connection.createAnswer());
       await gather(connection);
       if (this.host !== peer) throw new Error('Join canceled.');
-      return await encode(peer.id, connection.localDescription, offer.compressed);
+      return await encode(peer.id, localSignal(connection), offer.compressed);
     } catch (error) {
       this.drop(peer);
       throw error;
@@ -193,15 +205,7 @@ export class Room {
 
   bind(peer, channel, hosting) {
     peer.channel = channel;
-    channel.addEventListener('open', () => {
-      clearTimeout(peer.timer);
-      if (hosting) {
-        peer.timer = setTimeout(() => this.drop(peer, true), 10000);
-        return;
-      }
-      send(channel, JSON.stringify({ type: 'hello', name: this.local.name }));
-      peer.timer = setTimeout(() => this.drop(peer, true), 10000);
-    });
+    if (!hosting) channel.addEventListener('open', () => send(channel, JSON.stringify({ type: 'hello', name: this.local.name })));
     channel.addEventListener('message', ({ data }) => {
       const packet = readPacket(data);
       if (hosting) this.receiveGuest(peer, packet);
@@ -214,7 +218,6 @@ export class Room {
     if (!this.guests.has(peer.id)) return;
     const player = this.players.get(peer.id);
     if (packet?.type === 'hello' && !player) {
-      clearTimeout(peer.timer);
       const roster = [...this.players.values()];
       const base = cleanName(packet.name) || 'Traveler';
       const names = new Set(roster.map(entry => entry.name.toLowerCase()));
@@ -246,7 +249,6 @@ export class Room {
     if (!assigned) return;
     const first = this.local.id !== peer.id;
     if (first) {
-      clearTimeout(peer.timer);
       Object.assign(this.local, assigned);
     }
     const rosterChanged = roster.size !== this.players.size || [...roster.values()].some(player => this.players.get(player.id)?.name !== player.name);
@@ -279,7 +281,6 @@ export class Room {
     else if (!this.guests.delete(peer.id)) return;
     const wasPlaying = wasHost ? this.local.id === peer.id : this.players.delete(peer.id);
     this.positionSamples.delete(peer.id);
-    clearTimeout(peer.timer);
     peer.connection.close();
     if (notify) this.onDrop(wasHost, peer.id, wasPlaying);
   }
