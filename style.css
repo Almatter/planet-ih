@@ -72,6 +72,9 @@ button:disabled { opacity: .55; cursor: default; }
 #avatar-editor summary { min-height: 44px; padding: 10px 0; line-height: 24px; cursor: pointer; }
 #avatar-editor:not([open]) { padding-bottom: 0; }
 #avatar-preview { display: block; width: 100%; height: auto; background: radial-gradient(ellipse at 50% 90%, #735447, #33261f 72%); border-radius: 6px; }
+.preview-angles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-top: 6px; }
+.preview-angles button { padding-inline: 2px; font-size: .875rem; }
+.preview-angles button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--inset); }
 #avatar-fields, .timeout-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 8px; }
 #avatar-fields select { padding-inline: 4px; font-size: .9rem; }
 #mute-dialog { width: min(340px, calc(100% - 24px)); padding: 16px; color: inherit; background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; }

@@ -110,7 +110,7 @@ function tintedTile(name, crop, color, layer) {
   return canvas;
 }
 
-function sprite(context, name, x, y, width, { height, tint, layer, flip = false, angle = 0 } = {}) {
+function sprite(context, name, x, y, width, { height, tint, layer, flip = false, angle = 0, visibleFrom = 0 } = {}) {
   const crop = avatarTiles[name];
   if (!crop) return;
   const drawHeight = height ?? width * crop[3] / crop[2];
@@ -118,6 +118,11 @@ function sprite(context, name, x, y, width, { height, tint, layer, flip = false,
   context.translate(x, y);
   if (angle) context.rotate(angle);
   if (flip) context.scale(-1, 1);
+  if (visibleFrom) {
+    context.beginPath();
+    context.rect(-width / 2, drawHeight * visibleFrom, width, drawHeight * (1 - visibleFrom));
+    context.clip();
+  }
   if (tint) context.drawImage(tintedTile(name, crop, tint, layer), -width / 2, 0, width, drawHeight);
   else context.drawImage(atlas, ...crop, -width / 2, 0, width, drawHeight);
   context.restore();
@@ -130,9 +135,21 @@ function drawLeg(context, view, side, profile, phase) {
     { height: 11.6, flip: bent || (!profile && side < 0), angle: side * phase * (profile ? 0.13 : 0.036) });
 }
 
-function drawArm(context, view, side, spread, bob, phase, skin, profile) {
-  sprite(context, profile && side * phase > 1 ? 'arm-bent' : `arm-${view}`, side * spread, -18 - bob, profile ? 5.5 : 5,
-    { height: 10.8, tint: skin, layer: 'sleeve', flip: !profile && side > 0, angle: side * phase * 0.13 });
+function drawArm(context, view, x, swing, bob, skin, foreground = false) {
+  const profile = view === 'side';
+  sprite(context, profile && foreground && swing > 1 ? 'arm-bent' : `arm-${view}`, x, -17.7 - bob, profile ? 4.75 : 4.3,
+    { height: 10.8, tint: skin, layer: 'sleeve', flip: !profile && x > 0,
+      angle: swing * 0.1, visibleFrom: foreground ? 0.46 : 0 });
+}
+
+function drawTail(context, avatar, view, stride) {
+  if (avatar.tail === 'None') return;
+  // Both painted tails have their root on the left. Reverse the profile so the root meets the back hip.
+  const profile = view === 'side';
+  const back = view === 'back';
+  sprite(context, avatar.tail === 'Cat' ? 'tail-cat' : 'tail-dragon', profile ? -9.7 : back ? 6.5 : 9.7,
+    (back ? -14.9 : -19.4) + stride * 0.32, back ? 13.5 : 15,
+    { height: back ? 9.8 : 10.5, flip: profile, tint: accessoryColors[avatar.tailColor] });
 }
 
 function drawFeatures(context, avatar, view, head, bob, skin) {
@@ -176,6 +193,7 @@ export function drawAvatar(context, avatar, color, x, y, direction = 'south', ph
   const bob = phase ? body.sway * 0.43 : 0;
   const stride = Math.sign(phase) * Math.min(Math.abs(phase), body.step);
   const shoulders = body.shoulder - Number(profile) * 0.75;
+  const torsoWidth = shoulders * 2 + (profile ? 0.4 : 1.5);
   const torso = `${outfitTiles[avatar.outfit]}-${view}`;
   const torsoTint = avatar.dye === 'Room color' ? color : dyes[avatar.dye];
   const wings = avatar.wings === 'Bat' ? 'wings-bat' : 'wings-feathered';
@@ -189,19 +207,23 @@ export function drawAvatar(context, avatar, color, x, y, direction = 'south', ph
   context.ellipse(0, 0.35, shoulders + 2.25, 2.3, 0, 0, Math.PI * 2);
   context.fill();
 
-  if (avatar.tail !== 'None') sprite(context, avatar.tail === 'Cat' ? 'tail-cat' : 'tail-dragon', 10.2, -16 + stride * 0.36, 15,
-    { height: 10.5, tint: accessoryColors[avatar.tailColor] });
+  if (view !== 'back') drawTail(context, avatar, view, stride);
   if (avatar.wings !== 'None' && view !== 'back') sprite(context, wings,
     profile ? -3.5 : 0, -23.5 - bob, profile ? 27 : 33, { height: 15.5, tint: wingTint });
 
   drawLeg(context, view, -1, profile, stride);
   drawLeg(context, view, 1, profile, stride);
-  drawArm(context, view, -1, shoulders, bob, stride, skin, profile);
-  if (!profile) drawArm(context, view, 1, shoulders, bob, stride, skin, profile);
+  if (profile) drawArm(context, view, torsoWidth * 0.14, -stride, bob, skin);
+  else {
+    const sleeve = torsoWidth * 0.34;
+    drawArm(context, view, -sleeve, -stride, bob, skin);
+    drawArm(context, view, sleeve, stride, bob, skin);
+  }
   sprite(context, 'neck', 0, -21.7 - bob, 6.2, { height: 4.6, tint: skin });
-  sprite(context, torso, 0, -19.6 - bob, shoulders * 2 + (profile ? 0.4 : 1.5),
+  sprite(context, torso, 0, -19.6 - bob, torsoWidth,
     { height: avatar.outfit === 'Scholar robe' ? 16 : 14.2, tint: torsoTint, layer: 'cloth' });
-  if (profile) drawArm(context, view, 1, 2.3, bob, stride, skin, true);
+  if (profile) drawArm(context, view, -torsoWidth * 0.24, stride, bob, skin, true);
+  if (view === 'back') drawTail(context, avatar, view, stride);
   if (avatar.wings !== 'None' && view === 'back') sprite(context, wings,
     0, -22.8 - bob, 30.5, { height: 14.2, tint: wingTint });
   drawFeatures(context, avatar, view, body.head * 2 + 1.7, bob, skin);

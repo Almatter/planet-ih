@@ -1,5 +1,5 @@
-import { Room, capacity, chatLimit, maxMuteSeconds, cleanName, colors, width, height, position } from './room.js?v=9';
-import { avatarArtReady, avatarBounds, avatarOptions, cleanAvatar, drawAvatar, walkPose } from './avatar.js?v=9';
+import { Room, capacity, chatLimit, maxMuteSeconds, cleanName, colors, width, height, position } from './room.js?v=10';
+import { avatarArtReady, avatarBounds, avatarOptions, cleanAvatar, drawAvatar, walkPose } from './avatar.js?v=10';
 import { backdrops, defaultAmbience, tracks } from './ambience.js';
 import { RoomAudio } from './room-audio.js';
 
@@ -22,6 +22,7 @@ const chatEnd = byId('chat-end');
 const avatarEditor = byId('avatar-editor');
 const preview = byId('avatar-preview');
 const previewContext = preview.getContext('2d');
+const previewAngles = document.querySelectorAll('[data-angle]');
 const muteDialog = byId('mute-dialog');
 const muteTime = byId('mute-time');
 const muteUnit = byId('mute-unit');
@@ -37,6 +38,7 @@ let destination;
 let unread = 0;
 let mutingId;
 let playerAvatar;
+let previewAngle = 'south';
 
 function loadProfile() {
   try {
@@ -61,8 +63,18 @@ playerAvatar = cleanAvatar(profile?.avatar);
 function updateAvatarPreview() {
   previewContext.clearRect(0, 0, preview.width, preview.height);
   const bounds = avatarBounds({ avatar: playerAvatar, x: 0, y: 0 });
-  const zoom = 94 / -bounds.top;
-  drawAvatar(previewContext, playerAvatar, colors[0], preview.width / 2, preview.height - 14, 'south', 0, zoom);
+  const zoom = Math.min((preview.width - 38) / (bounds.right - bounds.left), (preview.height - 44) / (bounds.bottom - bounds.top));
+  const footY = (preview.height - (bounds.top + bounds.bottom) * zoom) / 2;
+  drawAvatar(previewContext, playerAvatar, colors[0], preview.width / 2, footY, previewAngle, 0, zoom);
+}
+
+for (const button of previewAngles) {
+  button.addEventListener('click', () => {
+    previewAngle = button.dataset.angle;
+    for (const angle of previewAngles) angle.setAttribute('aria-pressed', String(angle === button));
+    preview.setAttribute('aria-label', `${button.textContent} view of your avatar`);
+    updateAvatarPreview();
+  });
 }
 
 for (const [key, choices] of Object.entries(avatarOptions)) {

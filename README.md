@@ -2,7 +2,7 @@
 
 Planet IH is a browser multiplayer prototype for [Isekai Hell](https://github.com/Almatter/IsekaiHell). Up to eight players can meet in a medieval fantasy tea house. Open **Customize avatar** before hosting or joining. The three bodies have their own four-direction walk cycles. The medium body is the furniture reference, with small at half scale and large at 1.5×. Your avatar choices and display name are saved in your browser. Click or tap the floor to move. WASD and arrow keys also work.
 
-Avatars use painted anime-style layers. Outfit dye, skin, eyes, hair, ears, horns, tails, wings, and lips have separate color controls. The preview shows your choices as you edit.
+Avatars use painted anime-style layers. Outfit dye, skin, eyes, hair, ears, horns, tails, wings, and lips have separate color controls. The preview shows your choices from the front, left, right, and back.
 
 ## Join a room
 

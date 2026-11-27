@@ -7,8 +7,8 @@
   <meta name="description" content="Meet friends in the Isekai Hell tea house.">
   <title>Planet IH</title>
   <link rel="preload" href="./assets/avatar-atlas.png?v=9" as="image">
-  <link rel="stylesheet" href="./style.css?v=9">
-  <script type="module" src="./game.js?v=9"></script>
+  <link rel="stylesheet" href="./style.css?v=10">
+  <script type="module" src="./game.js?v=10"></script>
 </head>
 <body>
   <main>
@@ -30,7 +30,13 @@
         </div>
         <details id="avatar-editor">
           <summary>Customize avatar</summary>
-          <canvas id="avatar-preview" width="266" height="126" aria-label="Preview of your avatar"></canvas>
+          <canvas id="avatar-preview" width="520" height="480" aria-label="Front view of your avatar"></canvas>
+          <div class="preview-angles" role="group" aria-label="Avatar preview angle">
+            <button type="button" data-angle="south" aria-pressed="true">Front</button>
+            <button type="button" data-angle="west" aria-pressed="false">Left</button>
+            <button type="button" data-angle="east" aria-pressed="false">Right</button>
+            <button type="button" data-angle="north" aria-pressed="false">Back</button>
+          </div>
           <div id="avatar-fields"></div>
         </details>
         <div id="hosting" hidden>
