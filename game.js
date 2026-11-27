@@ -1,5 +1,5 @@
-import { Room, capacity, chatLimit, maxMuteSeconds, cleanName, colors, width, height, position } from './room.js?v=8';
-import { avatarBounds, avatarOptions, cleanAvatar, drawAvatar, walkPose } from './avatar.js?v=8';
+import { Room, capacity, chatLimit, maxMuteSeconds, cleanName, colors, width, height, position } from './room.js?v=9';
+import { avatarArtReady, avatarBounds, avatarOptions, cleanAvatar, drawAvatar, walkPose } from './avatar.js?v=9';
 import { backdrops, defaultAmbience, tracks } from './ambience.js';
 import { RoomAudio } from './room-audio.js';
 
@@ -71,7 +71,8 @@ for (const [key, choices] of Object.entries(avatarOptions)) {
   const select = document.createElement('select');
   select.id = `avatar-${key}`;
   label.htmlFor = select.id;
-  label.textContent = key === 'hairColor' ? 'Hair color' : key.charAt(0).toUpperCase() + key.slice(1);
+  const words = key.replace(/([A-Z])/g, ' $1').toLowerCase();
+  label.textContent = words.charAt(0).toUpperCase() + words.slice(1);
   for (const value of choices) select.add(new Option(value, value));
   select.value = playerAvatar[key];
   select.addEventListener('change', () => {
@@ -83,7 +84,10 @@ for (const [key, choices] of Object.entries(avatarOptions)) {
   field.append(label, select);
   byId('avatar-fields').append(field);
 }
-updateAvatarPreview();
+void avatarArtReady.then(loaded => {
+  if (loaded) updateAvatarPreview();
+  else setStatus('The avatar art could not load. Refresh to try again.');
+});
 
 function setPreference(input, fallback) {
   const key = `planet-ih-${input.id}`;

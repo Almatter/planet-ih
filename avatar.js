@@ -1,23 +1,35 @@
+import { avatarTiles } from './avatar-atlas.js?v=9';
+
+const accessoryColors = { Ivory: '#e5d5b6', Gold: '#dcaa66', Chestnut: '#ac7255', Ebony: '#594957',
+  Rose: '#d68b91', Teal: '#62aa99', Violet: '#a884bd' };
+const accessoryOptions = ['Natural', ...Object.keys(accessoryColors)];
+const lipColors = { Rose: '#bd707a', Plum: '#9b638e', Umber: '#85604c', Coral: '#d68872' };
+
 export const avatarOptions = {
   body: ['Small', 'Medium', 'Large'],
   outfit: ['Traveler tunic', 'Tea house apron', 'Scholar robe', 'Knight armor'],
   dye: ['Room color', 'Moss green', 'Burgundy', 'Indigo', 'Ochre'],
   ears: ['Round', 'Elf', 'Cat'],
+  earColor: accessoryOptions,
   horns: ['None', 'Antlers', 'Curved'],
+  hornColor: accessoryOptions,
   tail: ['None', 'Cat', 'Dragon'],
+  tailColor: accessoryOptions,
   wings: ['None', 'Feathered', 'Bat'],
+  wingColor: accessoryOptions,
   skin: ['Peach', 'Golden', 'Copper', 'Umber', 'Slate', 'Lavender'],
   eyes: ['Hazel', 'Blue', 'Green', 'Violet', 'Amber'],
   nose: ['Button', 'Straight', 'Broad'],
   mouth: ['Smile', 'Quiet', 'Fang'],
+  lipColor: ['Natural', ...Object.keys(lipColors)],
   hair: ['Cropped', 'Side fringe', 'Bob', 'Braids', 'Shaved'],
   hairColor: ['Chestnut', 'Ink', 'Gold', 'Auburn', 'Silver', 'Teal'],
 };
 
 export const defaultAvatar = {
-  body: 'Medium', outfit: 'Traveler tunic', dye: 'Room color', ears: 'Round',
-  horns: 'None', tail: 'None', wings: 'None', skin: 'Golden', eyes: 'Hazel',
-  nose: 'Button', mouth: 'Smile', hair: 'Cropped', hairColor: 'Chestnut',
+  body: 'Medium', outfit: 'Traveler tunic', dye: 'Room color', ears: 'Round', earColor: 'Natural',
+  horns: 'None', hornColor: 'Natural', tail: 'None', tailColor: 'Natural', wings: 'None', wingColor: 'Natural',
+  skin: 'Golden', eyes: 'Hazel', nose: 'Button', mouth: 'Smile', lipColor: 'Natural', hair: 'Cropped', hairColor: 'Chestnut',
 };
 
 export function cleanAvatar(input) {
@@ -34,24 +46,166 @@ const bodies = {
   Large: { scale: 2.4, shoulder: 8, head: 6, step: 2, sway: 1, cycle: 39, frames: [0, 1, 2, 0, -1, -2] },
 };
 
-const complexions = {
-  Peach: ['#fbd0ad', '#cf9179'], Golden: ['#de9b60', '#ad663f'], Copper: ['#b66a4a', '#793b34'],
-  Umber: ['#80513c', '#542e2c'], Slate: ['#9baebd', '#65788e'], Lavender: ['#c2a4db', '#8c6caa'],
-};
-const hairColors = {
-  Chestnut: ['#673931', '#a16449'], Ink: ['#272435', '#554b62'], Gold: ['#c98e3b', '#f9d575'],
-  Auburn: ['#8c392f', '#d76c4d'], Silver: ['#a5a5b8', '#e8e4ea'], Teal: ['#24666a', '#64b5a2'],
-};
-const eyeColors = { Hazel: '#523728', Blue: '#276288', Green: '#376237', Violet: '#583c81', Amber: '#805109' };
+const complexions = { Golden: '#d8965e', Copper: '#b57159', Umber: '#82523e', Slate: '#8fa5b9', Lavender: '#bda3d7' };
+const hairColors = { Ink: '#41364c', Gold: '#e7b25b', Auburn: '#b95440', Silver: '#bcbdcc', Teal: '#4ba5a1' };
+const eyeColors = { Hazel: '#946446', Blue: '#5896ce', Green: '#76a870', Violet: '#a272bd', Amber: '#d99139' };
 const dyes = { 'Moss green': '#8fbe76', Burgundy: '#cf6c88', Indigo: '#8b9ee2', Ochre: '#e7ab60' };
-const outline = '#251d25';
+const outfitTiles = { 'Traveler tunic': 'tunic', 'Tea house apron': 'apron', 'Scholar robe': 'robe', 'Knight armor': 'armor' };
+const hairTiles = { Cropped: 'cropped', 'Side fringe': 'fringe', Bob: 'bob', Braids: 'braids' };
+const atlas = typeof Image === 'function' ? new Image() : null;
+const tintedTiles = new Map();
+
+export const avatarArtReady = new Promise(resolve => {
+  if (!atlas) {
+    resolve(false);
+    return;
+  }
+  atlas.onload = () => resolve(true);
+  atlas.onerror = () => resolve(false);
+  atlas.src = new URL('./assets/avatar-atlas.png?v=9', import.meta.url).href;
+});
 
 export function avatarBounds(player) {
   const { scale, shoulder } = bodies[player.avatar.body];
-  const headwear = player.avatar.horns !== 'None' ? 36 : player.avatar.ears === 'Cat' ? 34 : 31;
-  const reach = player.avatar.wings === 'None' && player.avatar.tail === 'None' ? shoulder + 4 : 16;
+  const headwear = player.avatar.horns !== 'None' ? 42 : player.avatar.ears === 'Cat' ? 38 : 34;
+  const reach = player.avatar.wings === 'None' && player.avatar.tail === 'None' ? shoulder + 4 : 21;
   return { left: player.x - reach * scale, right: player.x + reach * scale,
     top: player.y - headwear * scale, bottom: player.y + 4 * scale };
+}
+
+function tintedTile(name, crop, color, layer) {
+  const key = `${name}:${color}:${layer}`;
+  if (tintedTiles.has(key)) return tintedTiles.get(key);
+  const [x, y, width, height] = crop;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  context.drawImage(atlas, x, y, width, height, 0, 0, width, height);
+  const image = context.getImageData(0, 0, width, height);
+  const pixels = image.data;
+  const target = color.slice(1).match(/../g).map(value => Number.parseInt(value, 16));
+  for (let i = 0; i < pixels.length; i += 4) {
+    if (!pixels[i + 3]) continue;
+    const red = pixels[i];
+    const green = pixels[i + 1];
+    const blue = pixels[i + 2];
+    const light = red * 0.25 + green * 0.58 + blue * 0.17;
+    const chroma = Math.max(red, green, blue) - Math.min(red, green, blue);
+    let weight = 0.85;
+    if (layer === 'sleeve') weight = Math.floor(i / 4 / width) > height * 0.39 && light > 112 ? 0.85 : 0;
+    if (layer === 'cloth') weight = chroma > 29 && light < 203 ? 0.63 : 0.12;
+    if (layer === 'eyes') weight = light > 49 && light < 190 && chroma < 79 ? 0.9 : 0;
+    if (layer === 'lips') weight = light > 75 && light < 196 && chroma > 25 ? 0.73 : 0;
+    const brightness = Math.min(1, light / 165);
+    const highlight = Math.max(0, (light - 165) / 90);
+    for (let channel = 0; channel < 3; channel++) {
+      const pigment = target[channel] * brightness + (255 - target[channel]) * highlight;
+      pixels[i + channel] = pixels[i + channel] * (1 - weight) + pigment * weight;
+    }
+  }
+  context.putImageData(image, 0, 0);
+  if (tintedTiles.size >= 256) tintedTiles.delete(tintedTiles.keys().next().value);
+  tintedTiles.set(key, canvas);
+  return canvas;
+}
+
+function sprite(context, name, x, y, width, { height, tint, layer, flip = false, angle = 0 } = {}) {
+  const crop = avatarTiles[name];
+  if (!crop) return;
+  const drawHeight = height ?? width * crop[3] / crop[2];
+  context.save();
+  context.translate(x, y);
+  if (angle) context.rotate(angle);
+  if (flip) context.scale(-1, 1);
+  if (tint) context.drawImage(tintedTile(name, crop, tint, layer), -width / 2, 0, width, drawHeight);
+  else context.drawImage(atlas, ...crop, -width / 2, 0, width, drawHeight);
+  context.restore();
+}
+
+function drawLeg(context, view, side, profile, phase) {
+  const lift = Math.max(0, side * phase);
+  const bent = profile && lift >= 1;
+  sprite(context, bent ? 'leg-bent' : `leg-${view}`, side * (profile ? 1.65 : 2.85), -11.6 - lift * 0.68, profile ? 6.1 : 5.5,
+    { height: 11.6, flip: bent || (!profile && side < 0), angle: side * phase * (profile ? 0.13 : 0.036) });
+}
+
+function drawArm(context, view, side, spread, bob, phase, skin, profile) {
+  sprite(context, profile && side * phase > 1 ? 'arm-bent' : `arm-${view}`, side * spread, -18 - bob, profile ? 5.5 : 5,
+    { height: 10.8, tint: skin, layer: 'sleeve', flip: !profile && side > 0, angle: side * phase * 0.13 });
+}
+
+function drawFeatures(context, avatar, view, head, bob, skin) {
+  const profile = view === 'side';
+  const center = profile ? 1.9 : 0;
+  const earTint = accessoryColors[avatar.earColor];
+  if (avatar.ears !== 'Cat') {
+    const ears = profile && avatar.ears === 'Elf' ? 'ear-side' : avatar.ears === 'Elf' ? 'ears-elf' : 'ears-round';
+    const single = ears === 'ear-side';
+    sprite(context, ears, single ? -head / 2 + 0.5 : 0, -25.3 - bob, single ? 5.1 : head + (avatar.ears === 'Elf' ? 5.2 : 3.5),
+      { tint: earTint ?? skin, height: avatar.ears === 'Elf' ? 6.4 : 5.35 });
+  }
+  sprite(context, `head-${view}`, 0, -31 - bob, head, { height: 12.8, tint: skin });
+  if (view !== 'back') {
+    sprite(context, profile ? 'eye-side' : 'eyes-front', center, -25.1 - bob, profile ? 4.2 : head * 0.69,
+      { height: 3.05, tint: eyeColors[avatar.eyes], layer: 'eyes' });
+    const nose = avatar.nose === 'Broad' ? 'nose-broad' : 'nose';
+    sprite(context, nose, center + (profile ? 1.65 : 0), -22.85 - bob, avatar.nose === 'Straight' ? 0.98 : 1.4,
+      { height: avatar.nose === 'Straight' ? 2.05 : 1.42, tint: skin });
+    const mouth = { Smile: 'mouth-smile', Quiet: 'mouth-quiet', Fang: 'mouth-fang' }[avatar.mouth];
+    sprite(context, mouth, center + (profile ? 0.75 : 0), -20.95 - bob, profile ? 2.45 : 3.35,
+      { tint: lipColors[avatar.lipColor], layer: 'lips' });
+  }
+  if (avatar.hair !== 'Shaved') sprite(context, `${hairTiles[avatar.hair]}-${view}`, 0, -33 - bob, head + 3.6,
+    { tint: hairColors[avatar.hairColor] });
+  if (avatar.ears === 'Cat') sprite(context, 'ears-cat', 0, -35.4 - bob, head + 1.4, { height: 8.3, tint: earTint ?? hairColors[avatar.hairColor] });
+  if (avatar.horns !== 'None') {
+    const antlers = avatar.horns === 'Antlers';
+    sprite(context, antlers ? 'antlers' : 'horns', 0, (antlers ? -40.6 : -35.6) - bob, head + (antlers ? 4.8 : 3.8),
+      { height: antlers ? 12.8 : 8.5, tint: accessoryColors[avatar.hornColor] });
+  }
+}
+
+export function drawAvatar(context, avatar, color, x, y, direction = 'south', phase = 0, previewScale = 1) {
+  if (!atlas?.naturalWidth) return;
+  const body = bodies[avatar.body];
+  const scale = body.scale * previewScale;
+  const skin = complexions[avatar.skin];
+  const view = direction === 'north' ? 'back' : direction === 'south' ? 'front' : 'side';
+  const profile = view === 'side';
+  const bob = phase ? body.sway * 0.43 : 0;
+  const stride = Math.sign(phase) * Math.min(Math.abs(phase), body.step);
+  const shoulders = body.shoulder - Number(profile) * 0.75;
+  const torso = `${outfitTiles[avatar.outfit]}-${view}`;
+  const torsoTint = avatar.dye === 'Room color' ? color : dyes[avatar.dye];
+  const wings = avatar.wings === 'Bat' ? 'wings-bat' : 'wings-feathered';
+  const wingTint = accessoryColors[avatar.wingColor];
+
+  context.save();
+  context.translate(x, y);
+  context.scale(direction === 'west' ? -scale : scale, scale);
+  context.fillStyle = '#23151d58';
+  context.beginPath();
+  context.ellipse(0, 0.35, shoulders + 2.25, 2.3, 0, 0, Math.PI * 2);
+  context.fill();
+
+  if (avatar.tail !== 'None') sprite(context, avatar.tail === 'Cat' ? 'tail-cat' : 'tail-dragon', 10.2, -16 + stride * 0.36, 15,
+    { height: 10.5, tint: accessoryColors[avatar.tailColor] });
+  if (avatar.wings !== 'None' && view !== 'back') sprite(context, wings,
+    profile ? -3.5 : 0, -23.5 - bob, profile ? 27 : 33, { height: 15.5, tint: wingTint });
+
+  drawLeg(context, view, -1, profile, stride);
+  drawLeg(context, view, 1, profile, stride);
+  drawArm(context, view, -1, shoulders, bob, stride, skin, profile);
+  if (!profile) drawArm(context, view, 1, shoulders, bob, stride, skin, profile);
+  sprite(context, 'neck', 0, -21.7 - bob, 6.2, { height: 4.6, tint: skin });
+  sprite(context, torso, 0, -19.6 - bob, shoulders * 2 + (profile ? 0.4 : 1.5),
+    { height: avatar.outfit === 'Scholar robe' ? 16 : 14.2, tint: torsoTint, layer: 'cloth' });
+  if (profile) drawArm(context, view, 1, 2.3, bob, stride, skin, true);
+  if (avatar.wings !== 'None' && view === 'back') sprite(context, wings,
+    0, -22.8 - bob, 30.5, { height: 14.2, tint: wingTint });
+  drawFeatures(context, avatar, view, body.head * 2 + 1.7, bob, skin);
+  context.restore();
 }
 
 export function walkPose(avatar, previous, x, y, now) {
@@ -65,140 +219,4 @@ export function walkPose(avatar, previous, x, y, now) {
   const progress = (now - lastMove < 120 ? previous?.progress ?? 0 : 0) + (moving ? distance : 0);
   const phase = now - lastMove < 120 ? body.frames[Math.floor(progress / body.cycle * body.frames.length) % body.frames.length] : 0;
   return { x, y, direction, lastMove, progress: progress % body.cycle, phase };
-}
-
-function drawBackGear(rect, avatar, dye, sway) {
-  if (avatar.wings === 'Feathered') {
-    rect(-15, -23, 30, 5, outline);
-    rect(-14, -22, 28, 3, '#e8d8bc');
-    rect(-15, -19, 9, 6, outline);
-    rect(6, -19, 9, 6, outline);
-    rect(-14, -19, 9, 4, '#fff2d1');
-    rect(5, -19, 9, 4, '#fff2d1');
-    rect(-12, -15, 8, 3, '#bca6a5');
-    rect(4, -15, 8, 3, '#bca6a5');
-  }
-  if (avatar.wings === 'Bat') {
-    for (const side of [-1, 1]) {
-      const x = side < 0 ? -16 : 6;
-      rect(x, -23, 10, 3, outline);
-      rect(x + 1, -20, 8, 7, '#604469');
-      rect(x + (side < 0 ? 4 : 0), -17, 6, 5, '#93617f');
-      rect(x + (side < 0 ? 0 : 8), -24, 2, 7, outline);
-    }
-  }
-  if (avatar.tail !== 'None') {
-    const dragon = avatar.tail === 'Dragon';
-    rect(4, -10, 8, 4, outline);
-    rect(8, -10 + sway, 5, 3, dragon ? '#629274' : dye);
-    rect(11, -14 + sway, 3, 6, outline);
-    rect(12, -14 + sway, dragon ? 4 : 2, 3, dragon ? '#9ac18b' : dye);
-  }
-}
-
-function drawHead(rect, avatar, body, profile, back, skin, shade, hair, sheen) {
-  const head = body.head;
-  if (avatar.horns === 'Antlers') {
-    for (const side of [-1, 1]) {
-      rect(side * 7 - 1, -35, 2, 8, '#e3c198');
-      rect(side * 5 - 1, -32, 2, 5, '#a77956');
-      rect(side * 8 - 1, -34, 2, 3, '#f1d6a6');
-    }
-  } else if (avatar.horns === 'Curved') {
-    rect(-8, -34, 3, 8, '#d3b28d'); rect(5, -34, 3, 8, '#d3b28d');
-    rect(-8, -34, 2, 2, '#fff1ce'); rect(6, -34, 2, 2, '#fff1ce');
-  }
-  for (const side of [-1, 1]) {
-    if (profile && side === 1) continue;
-    const earX = side < 0 ? -head - 3 : head;
-    const tall = avatar.ears === 'Cat';
-    const pointed = avatar.ears === 'Elf';
-    rect(earX, tall ? -32 : -25, pointed ? 4 : 3, tall ? 8 : 5, outline);
-    rect(earX + 1, tall ? -30 : pointed ? -25 : -24, pointed ? 3 : 2, tall ? 5 : 3, tall ? hair : shade);
-    if (tall) rect(earX + 1, -29, 1, 3, '#da9299');
-  }
-  rect(-head, -30, head * 2, 12, outline);
-  rect(-head - 1, -27, head * 2 + 2, 7, outline);
-  rect(-head + 1, -28, head * 2 - 2, 9, back && avatar.hair !== 'Shaved' ? hair : skin);
-  if (avatar.hair !== 'Shaved') {
-    rect(-head + 1, -30, head * 2 - 2, back ? 10 : 4, hair);
-    rect(-head + 2, -29, head * 2 - 4, 1, sheen);
-    if (avatar.hair === 'Side fringe') rect(-head + 1, -27, 3, 4, hair);
-    if (avatar.hair === 'Bob' || avatar.hair === 'Braids') {
-      rect(-head, -27, 2, 9, hair); rect(head - 2, -27, 2, 9, hair);
-      if (avatar.hair === 'Braids') {
-        rect(-head - 1, -20, 2, 6, sheen); rect(head - 1, -20, 2, 6, sheen);
-      }
-    }
-  }
-  if (back) return;
-  const eyes = eyeColors[avatar.eyes];
-  rect(profile ? 2 : -3, -25, 2, 2, eyes);
-  if (!profile) rect(2, -25, 2, 2, eyes);
-  const noseX = profile ? 4 : 0;
-  rect(noseX, -23, avatar.nose === 'Broad' ? 2 : 1, avatar.nose === 'Straight' ? 2 : 1, shade);
-  const mouthX = profile ? 2 : -1;
-  rect(mouthX, -21, avatar.mouth === 'Quiet' ? 2 : 3, 1, '#743c47');
-  if (avatar.mouth === 'Smile') rect(mouthX + 1, -20, 2, 1, '#a25658');
-  if (avatar.mouth === 'Fang') rect(mouthX + 2, -21, 1, 2, '#fff0d1');
-}
-
-export function drawAvatar(context, avatar, color, x, y, direction = 'south', phase = 0, previewScale = 1) {
-  const body = bodies[avatar.body];
-  const scale = body.scale * previewScale;
-  const dye = dyes[avatar.dye] ?? color;
-  const [skin, shade] = complexions[avatar.skin];
-  const [hair, sheen] = hairColors[avatar.hairColor];
-  const back = direction === 'north';
-  const profile = direction === 'east' || direction === 'west';
-  const bob = phase ? body.sway : 0;
-  const stride = Math.sign(phase) * Math.min(Math.abs(phase), body.step);
-  const shoulder = body.shoulder - Number(profile);
-  const rect = (left, top, width, height, fill) => {
-    context.fillStyle = fill;
-    context.fillRect(left, top, width, height);
-  };
-
-  context.save();
-  context.translate(Math.round(x), Math.round(y));
-  context.scale(scale * (direction === 'west' ? -1 : 1), scale);
-  context.fillStyle = '#23151d59';
-  context.beginPath();
-  context.ellipse(0, 0, shoulder + 2, 2.8, 0, 0, Math.PI * 2);
-  context.fill();
-  drawBackGear(rect, avatar, dye, phase);
-  for (const side of [-1, 1]) {
-    const footX = side * 3 - 2 + (profile ? side * stride : 0);
-    const rise = Math.min(0, side * stride);
-    rect(footX, -9 + rise, 5, 9, outline);
-    rect(footX + 1, -8 + rise, 3, 5, '#624748');
-    rect(footX + (profile ? 1 : 0), -3 + rise, 5, 3, '#372831');
-    rect(footX + 1, -3 + rise, 2, 1, '#ad8262');
-  }
-  const hem = avatar.outfit === 'Scholar robe' ? 17 : 13;
-  rect(-shoulder, -19 - bob, shoulder * 2, hem, outline);
-  rect(-shoulder + 1, -18 - bob, shoulder * 2 - 2, hem - 2, dye);
-  for (const side of [-1, 1]) {
-    const armX = side < 0 ? -shoulder - 2 : shoulder - 1;
-    const armY = -17 - bob + side * stride;
-    rect(armX, armY, 3, 9, outline);
-    rect(armX + 1, armY + 1, 2, 5, dye);
-    rect(armX + 1, armY + 6, 2, 2, skin);
-  }
-  if (!back && avatar.outfit === 'Tea house apron') {
-    rect(-3, -16 - bob, 6, 9, '#f1d9ad'); rect(-2, -10 - bob, 4, 2, '#bd996e');
-  } else if (avatar.outfit === 'Knight armor') {
-    rect(-shoulder + 1, -17 - bob, shoulder * 2 - 2, 3, '#a5aebd');
-    rect(-3, -14 - bob, 6, 4, '#d4dbe0'); rect(-2, -13 - bob, 4, 1, '#637588');
-  } else {
-    rect(-shoulder + 1, -10 - bob, shoulder * 2 - 2, 2, '#513a3c');
-    if (!back) rect(-1, -10 - bob, 2, 2, '#f3c881');
-  }
-  if (back && avatar.wings !== 'None') {
-    rect(-2, -18 - bob, 4, 7, outline);
-    rect(-1, -17 - bob, 2, 4, avatar.wings === 'Bat' ? '#93617f' : '#e8d8bc');
-  }
-  context.translate(profile ? 1 : 0, -bob);
-  drawHead(rect, avatar, body, profile, back, skin, shade, hair, sheen);
-  context.restore();
 }
