@@ -1,4 +1,4 @@
-import { Room, capacity, cleanName, colors, width, height, position } from './room.js?v=3';
+import { Room, capacity, cleanName, colors, width, height, position } from './room.js?v=4';
 
 const byId = id => document.getElementById(id);
 const canvas = byId('field');
@@ -119,7 +119,8 @@ byId('invite').addEventListener('click', async () => {
     if (activeRoom !== room) return;
     inviteId = id;
     const url = new URL(location.href);
-    url.hash = `invite=${token}`;
+    url.search = '';
+    url.hash = token;
     byId('invite-code').value = url.href;
     byId('offer').hidden = false;
     setStatus('Send the link in a private chat and ask your friend to send back their reply code.');
@@ -184,12 +185,19 @@ byId('reply').addEventListener('click', async () => {
   }
 });
 
-for (const [buttonId, fieldId] of [['copy-invite', 'invite-code'], ['copy-reply', 'reply-code']]) {
+for (const [buttonId, fieldId] of [
+  ['copy-invite', 'invite-code'], ['discord-invite', 'invite-code'],
+  ['copy-reply', 'reply-code'], ['discord-reply', 'reply-code'],
+]) {
   byId(buttonId).addEventListener('click', async () => {
     const field = byId(fieldId);
+    const isInvite = fieldId === 'invite-code';
+    let text = field.value;
+    if (buttonId === 'discord-invite') text = `[Join Planet IH](${text})`;
+    if (buttonId === 'discord-reply') text = '```\n' + text + '\n```';
     try {
-      await navigator.clipboard.writeText(field.value);
-      setStatus(buttonId === 'copy-invite' ? 'Invite copied. Send it to one friend.' : 'Reply copied. Send it to the host, then come back to this tab.');
+      await navigator.clipboard.writeText(text);
+      setStatus(isInvite ? 'Invite copied. Send it to one friend.' : 'Reply copied. Send it to the host, then come back to this tab.');
     } catch {
       field.focus();
       field.select();
@@ -305,11 +313,16 @@ function drawLabels(players, fontSize) {
 }
 
 reset('Play solo or invite friends to share the field.');
-const incoming = new URLSearchParams(location.hash.slice(1)).get('invite');
-if (incoming) {
-  showJoin(incoming);
+function openInviteFromUrl() {
+  const fragment = location.hash.slice(1);
+  const incoming = /^[Ii]\./.test(fragment) ? fragment : new URLSearchParams(fragment).get('invite');
+  if (!incoming) return;
   history.replaceState(null, '', location.pathname + location.search);
+  if (mode === 'solo' || (mode === 'join' && !byId('reply').disabled)) showJoin(incoming);
+  else setStatus('Open this invite in a new tab or leave the current room first.');
 }
+openInviteFromUrl();
+addEventListener('hashchange', openInviteFromUrl);
 const field = makeField();
 let labelSize = 19;
 new ResizeObserver(([entry]) => {

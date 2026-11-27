@@ -9,6 +9,8 @@ Planet IH is a browser multiplayer prototype for [Isekai Hell](https://github.co
 3. Have them send the reply code back. Paste it into the host page and choose **Connect guest**.
 4. Create a fresh invite for each additional friend. Keep the host tab open for the life of the room. On a phone, the join controls appear above the field. Open the invite in Safari or Chrome and return to the game after sending the reply. Planet IH has no countdown for swapping codes, though mobile browsers can still suspend or discard a tab left in the background.
 
+For Discord, use **Copy Discord invite** to paste a clickable **Join Planet IH** link with the code hidden in the URL. **Copy Discord reply** formats the reply as a code block. The host can paste the code by itself or copy and paste the whole Discord message.
+
 ## Run locally
 
 From this folder, start a static HTTP server and open [the local game](http://localhost:8000/). Two or three tabs on the same computer can test the invite flow. For a phone or another device, use the published HTTPS URL so both devices can open the same page.

@@ -7,7 +7,7 @@
   <meta name="description" content="A small browser-to-browser multiplayer playground.">
   <title>Planet IH</title>
   <link rel="stylesheet" href="./style.css?v=3">
-  <script type="module" src="./game.js?v=3"></script>
+  <script type="module" src="./game.js?v=4"></script>
 </head>
 <body>
   <main>
@@ -31,6 +31,7 @@
             <label for="invite-code">Send this link to one friend</label>
             <textarea id="invite-code" rows="2" readonly spellcheck="false"></textarea>
             <button id="copy-invite">Copy invite link</button>
+            <button id="discord-invite">Copy Discord invite</button>
             <label for="reply-in">Paste your friend’s reply code</label>
             <textarea id="reply-in" rows="2" autocomplete="off" spellcheck="false"></textarea>
             <button id="accept" class="primary wide">Connect guest</button>
@@ -47,6 +48,7 @@
             <label for="reply-code">Send this reply code to the host</label>
             <textarea id="reply-code" rows="2" readonly spellcheck="false"></textarea>
             <button id="copy-reply" class="primary wide">Copy reply code</button>
+            <button id="discord-reply" class="wide">Copy Discord reply</button>
           </div>
         </div>
         <button id="leave" class="wide" hidden>Leave room</button>

@@ -1,7 +1,6 @@
+import { decodeSignal, encodeSignal } from './signaling.js?v=4';
+
 const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
-const plainPrefix = 'planet-ih-1.';
-const compactPrefix = 'planet-ih-2.';
-const maxSignalSize = 50000;
 const playbackDelay = 110;
 const gatheringLimit = 30000;
 export const colors = ['#baf592', '#ffc375', '#74ddf6', '#f995bd', '#c7afff', '#f8e979', '#6ff0ce', '#ff927e'];
@@ -19,57 +18,6 @@ export function position(x, y) {
     x: Math.max(margin, Math.min(width - margin, x)),
     y: Math.max(margin, Math.min(height - margin, y)),
   };
-}
-
-async function encode(id, description, allowCompression = true) {
-  const payload = JSON.stringify({ id, type: description.type, sdp: description.sdp });
-  let bytes = new TextEncoder().encode(payload);
-  let prefix = plainPrefix;
-  if (allowCompression && globalThis.CompressionStream && globalThis.DecompressionStream) {
-    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'));
-    const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
-    if (compressed.length < bytes.length) {
-      bytes = compressed;
-      prefix = compactPrefix;
-    }
-  }
-  return prefix + btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join('')).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-async function readCompressedSignal(bytes) {
-  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate')).getReader();
-  const decoder = new TextDecoder();
-  let size = 0;
-  let text = '';
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) return text + decoder.decode();
-    size += value.length;
-    if (size > maxSignalSize) {
-      await reader.cancel();
-      throw new Error('Signal too large');
-    }
-    text += decoder.decode(value, { stream: true });
-  }
-}
-
-async function decode(input, type) {
-  const fragments = input.trim().split('#');
-  const token = fragments.at(-1).replace(/^invite=/, '');
-  const compressed = token.startsWith(compactPrefix);
-  if (compressed && !globalThis.DecompressionStream) throw new Error('Open this invite or reply in a current browser.');
-  try {
-    const prefix = compressed ? compactPrefix : plainPrefix;
-    if (token.length > maxSignalSize || !token.startsWith(prefix)) throw new Error();
-    const base64 = token.slice(prefix.length).replace(/-/g, '+').replace(/_/g, '/');
-    const bytes = Uint8Array.from(atob(base64), char => char.charCodeAt(0));
-    const payload = compressed ? await readCompressedSignal(bytes) : new TextDecoder().decode(bytes);
-    const data = JSON.parse(payload);
-    if (data.type !== type || !/^[a-f0-9-]{36}$/.test(data.id) || typeof data.sdp !== 'string' || !data.sdp.startsWith('v=0')) throw new Error();
-    return { ...data, compressed };
-  } catch {
-    throw new Error(type === 'offer' ? 'Paste the full invite link from the host.' : 'Paste the full reply code from your guest.');
-  }
 }
 
 function gather(connection) {
@@ -169,7 +117,7 @@ export class Room {
       await peer.connection.setLocalDescription(await peer.connection.createOffer());
       await gather(peer.connection);
       if (!this.guests.has(id)) throw new Error('Invite canceled.');
-      const token = await encode(id, localSignal(peer.connection));
+      const token = await encodeSignal(id, localSignal(peer.connection));
       return { id, token };
     } catch (error) {
       this.drop(peer);
@@ -178,14 +126,14 @@ export class Room {
   }
 
   async accept(id, input) {
-    const reply = await decode(input, 'answer');
+    const reply = await decodeSignal(input, 'answer');
     const peer = this.guests.get(id);
     if (!peer || reply.id !== id) throw new Error('That reply belongs to a different invite.');
     await peer.connection.setRemoteDescription(exchangeDescription(reply));
   }
 
   async answer(input) {
-    const offer = await decode(input, 'offer');
+    const offer = await decodeSignal(input, 'offer');
     if (this.closed) throw new Error('Join canceled.');
     const peer = this.makePeer(offer.id);
     this.host = peer;
@@ -196,7 +144,7 @@ export class Room {
       await connection.setLocalDescription(await connection.createAnswer());
       await gather(connection);
       if (this.host !== peer) throw new Error('Join canceled.');
-      return await encode(peer.id, localSignal(connection), offer.compressed);
+      return await encodeSignal(peer.id, localSignal(connection), offer.version);
     } catch (error) {
       this.drop(peer);
       throw error;
