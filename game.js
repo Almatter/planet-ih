@@ -1,4 +1,6 @@
-import { Room, capacity, chatLimit, cleanName, colors, width, height, position } from './room.js?v=5';
+import { Room, capacity, chatLimit, cleanName, colors, width, height, position } from './room.js?v=7';
+import { backdrops, defaultAmbience, tracks } from './ambience.js';
+import { RoomAudio } from './room-audio.js';
 
 const byId = id => document.getElementById(id);
 const canvas = byId('field');
@@ -6,9 +8,17 @@ const context = canvas.getContext('2d');
 const nameInput = byId('name');
 const status = byId('status');
 const hideNames = byId('hide-names');
+const musicEnabled = byId('music-enabled');
+const sfxEnabled = byId('sfx-enabled');
+const backdropSelect = byId('backdrop');
+const trackSelect = byId('track');
+const audio = new RoomAudio();
 const messageInput = byId('message');
 const chatHistory = byId('chat-history');
 const chatLog = byId('chat-log');
+const chatNotice = byId('chat-notice');
+const chatEnd = byId('chat-end');
+const pageTitle = document.title;
 const keys = new Set();
 const bubbles = new Map();
 const directions = { w: 'up', a: 'left', s: 'down', d: 'right', arrowup: 'up', arrowleft: 'left', arrowdown: 'down', arrowright: 'right' };
@@ -16,18 +26,84 @@ let mode = 'solo';
 let room;
 let inviteId;
 let destination;
+let unread = 0;
 
-try {
-  hideNames.checked = localStorage.getItem('planet-ih-hide-names') === 'true';
-} catch {
-  // The checkbox still works if browser storage is disabled.
-}
-hideNames.addEventListener('change', () => {
+function setPreference(input, fallback) {
+  const key = `planet-ih-${input.id}`;
   try {
-    localStorage.setItem('planet-ih-hide-names', String(hideNames.checked));
+    const saved = localStorage.getItem(key);
+    input.checked = saved === null ? fallback : saved === 'true';
   } catch {
-    // Keep the setting for this page even when it cannot be saved.
+    input.checked = fallback;
   }
+  input.addEventListener('change', () => {
+    try {
+      localStorage.setItem(key, String(input.checked));
+    } catch {
+      // Use the in-page setting when the browser disallows storage.
+    }
+  });
+}
+setPreference(hideNames, false);
+setPreference(musicEnabled, false);
+setPreference(sfxEnabled, true);
+
+for (const [select, choices] of [[backdropSelect, backdrops], [trackSelect, tracks]]) {
+  for (const [value, label] of Object.entries(choices)) select.add(new Option(label, value));
+  select.addEventListener('change', () => {
+    if (mode === 'host') room.setAmbience({ backdrop: backdropSelect.value, track: trackSelect.value });
+  });
+}
+
+function updateAmbience(ambience) {
+  const inRoom = mode === 'host' || mode === 'guest';
+  canvas.dataset.backdrop = ambience.backdrop;
+  backdropSelect.value = ambience.backdrop;
+  trackSelect.value = ambience.track;
+  byId('room-track').textContent = ambience.track === 'none' ? 'No room music' : `Room track · ${tracks[ambience.track]}`;
+  audio.setTrack(inRoom && musicEnabled.checked ? ambience.track : 'none');
+}
+
+function unlockAudio() {
+  if (musicEnabled.checked || sfxEnabled.checked) void audio.unlock();
+}
+addEventListener('click', unlockAudio, { capture: true });
+addEventListener('keydown', unlockAudio, { capture: true });
+musicEnabled.addEventListener('change', () => {
+  updateAmbience(room.ambience);
+  unlockAudio();
+});
+sfxEnabled.addEventListener('change', unlockAudio);
+
+function nearChatBottom() {
+  return chatHistory.scrollHeight - chatHistory.scrollTop - chatHistory.clientHeight < 28;
+}
+
+function updateUnread(count) {
+  unread = count;
+  document.title = unread ? `(${unread}) ${pageTitle}` : pageTitle;
+  chatNotice.hidden = !unread;
+  chatNotice.textContent = unread === 1 ? '1 new chat message' : `${unread} new chat messages`;
+}
+
+function markChatRead() {
+  if (unread && canSeeNewestMessage()) updateUnread(0);
+}
+
+function canSeeNewestMessage() {
+  if (document.hidden || !nearChatBottom()) return false;
+  const end = chatEnd.getBoundingClientRect();
+  return end.top >= 0 && end.bottom <= document.documentElement.clientHeight;
+}
+
+new IntersectionObserver(markChatRead).observe(chatEnd);
+document.addEventListener('visibilitychange', markChatRead);
+chatHistory.addEventListener('scroll', markChatRead, { passive: true });
+chatNotice.addEventListener('click', () => {
+  chatHistory.scrollTop = chatHistory.scrollHeight;
+  byId('chat-title').scrollIntoView({ block: 'center' });
+  chatHistory.focus({ preventScroll: true });
+  updateUnread(0);
 });
 
 function setStatus(message) {
@@ -69,14 +145,17 @@ function setMode(next) {
   byId('room-name').hidden = mode === 'guest';
   nameInput.disabled = mode === 'join' && (byId('reply').disabled || !byId('answer').hidden) || mode === 'guest';
   const canChat = mode === 'host' || mode === 'guest';
+  document.querySelector('.audio-options').hidden = !canChat;
   messageInput.disabled = !canChat;
   messageInput.placeholder = canChat ? 'Write a message' : 'Host or join to chat';
   byId('send-chat').disabled = !canChat;
+  updateAmbience(room?.ambience ?? defaultAmbience);
 }
 
 function showChat(entries, silent) {
-  const follow = chatHistory.scrollHeight - chatHistory.scrollTop - chatHistory.clientHeight < 28 ||
+  const follow = nearChatBottom() ||
     (!silent && entries.some(entry => entry.playerId === room.local.id));
+  const incoming = silent ? 0 : entries.filter(entry => entry.playerId !== room.local.id).length;
   const added = document.createDocumentFragment();
   for (const { playerId, name, text, color } of entries) {
     const row = document.createElement('li');
@@ -90,6 +169,10 @@ function showChat(entries, silent) {
   byId('chat-empty').hidden = true;
   chatLog.append(added);
   if (follow) chatHistory.scrollTop = chatHistory.scrollHeight;
+  if (incoming) {
+    if (sfxEnabled.checked) audio.chime();
+    if (!canSeeNewestMessage()) updateUnread(unread + incoming);
+  }
 }
 
 function updateMessageCount() {
@@ -132,6 +215,7 @@ function reset(message) {
   destination = undefined;
   bubbles.clear();
   chatLog.replaceChildren();
+  updateUnread(0);
   byId('chat-empty').hidden = false;
   byId('chat-status').hidden = true;
   messageInput.value = '';
@@ -155,7 +239,7 @@ function reset(message) {
     if (id === inviteId) clearInvite();
     setStatus(wasPlaying ? 'A guest left the room.' : 'The browser could not connect. Ask your guest to return to the game, then create a fresh invite.');
     renderRoster();
-  }, showChat);
+  }, showChat, updateAmbience);
   clearInvite();
   byId('offer-in').value = '';
   byId('offer-in').readOnly = false;
@@ -302,7 +386,10 @@ canvas.addEventListener('click', event => {
   destination = position((event.clientX - bounds.left) * width / bounds.width, (event.clientY - bounds.top) * height / bounds.height);
 });
 addEventListener('blur', () => keys.clear());
-addEventListener('pagehide', () => room.close());
+addEventListener('pagehide', () => {
+  audio.setTrack('none');
+  room.close();
+});
 addEventListener('pageshow', event => {
   if (event.persisted) reset('Play solo or invite friends to share the field.');
 });

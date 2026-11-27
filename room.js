@@ -1,4 +1,5 @@
 import { decodeSignal, encodeSignal } from './signaling.js?v=4';
+import { backdrops, defaultAmbience, tracks } from './ambience.js';
 
 const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
 const playbackDelay = 110;
@@ -71,16 +72,31 @@ function validPosition(player) {
 }
 
 export class Room {
-  constructor(local, onChange, onDrop, onChat) {
+  constructor(local, onChange, onDrop, onChat, onAmbience) {
     this.local = local;
     this.onChange = onChange;
     this.onDrop = onDrop;
     this.onChat = onChat;
+    this.onAmbience = onAmbience;
     this.players = new Map([[local.id, local]]);
     this.guests = new Map();
     this.positionSamples = new Map();
     this.chat = [];
+    this.ambience = defaultAmbience;
     this.closed = false;
+  }
+
+  applyAmbience(ambience) {
+    if (typeof ambience?.backdrop !== 'string' || typeof ambience.track !== 'string' ||
+        !Object.hasOwn(backdrops, ambience.backdrop) || !Object.hasOwn(tracks, ambience.track)) return false;
+    if (this.ambience.backdrop === ambience.backdrop && this.ambience.track === ambience.track) return false;
+    this.ambience = { backdrop: ambience.backdrop, track: ambience.track };
+    this.onAmbience?.(this.ambience);
+    return true;
+  }
+
+  setAmbience(ambience) {
+    if (!this.host && !this.closed && this.applyAmbience(ambience)) this.tick();
   }
 
   recordPosition(player, time) {
@@ -234,6 +250,7 @@ export class Room {
     const rosterChanged = roster.size !== this.players.size || [...roster.values()].some(player => this.players.get(player.id)?.name !== player.name);
     roster.set(peer.id, this.local);
     this.players = roster;
+    this.applyAmbience(packet.ambience);
     const now = performance.now();
     for (const id of this.positionSamples.keys()) {
       if (!roster.has(id)) this.positionSamples.delete(id);
@@ -264,7 +281,7 @@ export class Room {
       send(this.host.channel, JSON.stringify({ type: 'move', x, y }));
     }
     if (this.guests.size) {
-      const state = JSON.stringify({ type: 'state', players: [...this.players.values()] });
+      const state = JSON.stringify({ type: 'state', players: [...this.players.values()], ambience: this.ambience });
       for (const peer of this.guests.values()) {
         if (!this.players.has(peer.id) || !send(peer.channel, state)) continue;
         const start = peer.chatCursor;

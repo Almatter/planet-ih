@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#1c1713">
   <meta name="description" content="Meet friends in the Isekai Hell tea house.">
   <title>Planet IH</title>
-  <link rel="stylesheet" href="./style.css?v=6">
-  <script type="module" src="./game.js?v=6"></script>
+  <link rel="stylesheet" href="./style.css?v=7">
+  <script type="module" src="./game.js?v=7"></script>
 </head>
 <body>
   <main>
@@ -28,6 +28,10 @@
           <button id="join">Join room</button>
         </div>
         <div id="hosting" hidden>
+          <div class="host-ambience">
+            <div><label for="backdrop">Room background</label><select id="backdrop"></select></div>
+            <div><label for="track">Room music</label><select id="track"></select></div>
+          </div>
           <button id="invite" class="primary wide">Create invite</button>
           <div id="offer" hidden>
             <label for="invite-code">Send this link to one friend</label>
@@ -54,6 +58,11 @@
           </div>
         </div>
         <button id="leave" class="wide" hidden>Leave room</button>
+        <div class="audio-options" role="group" aria-label="Personal audio" hidden>
+          <p id="room-track"></p>
+          <label class="audio-toggle"><input id="music-enabled" type="checkbox"> Play music</label>
+          <label class="audio-toggle"><input id="sfx-enabled" type="checkbox" checked> Chat sound</label>
+        </div>
       </section>
       <section class="play" aria-labelledby="field-title">
         <div class="bar field-bar">
@@ -69,6 +78,7 @@
           <div id="chat-history" role="log" aria-labelledby="chat-title" tabindex="0">
             <p id="chat-empty">No messages yet.</p>
             <ol id="chat-log"></ol>
+            <div id="chat-end" aria-hidden="true"></div>
           </div>
           <form id="chat-form">
             <input id="message" aria-label="Chat message" aria-describedby="chat-count" autocomplete="off" placeholder="Host or join to chat" disabled>
@@ -82,6 +92,7 @@
         <ul id="players"></ul>
       </section>
     </div>
+    <button id="chat-notice" type="button" hidden></button>
   </main>
 </body>
 </html>

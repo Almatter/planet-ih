@@ -13,6 +13,8 @@ For Discord, use **Copy Discord invite** to paste a clickable **Join Planet IH**
 
 Room chat allows up to 100 characters per message. New messages appear in speech bubbles beside players for a few seconds. Room history is kept in the host's browser, appears for later arrivals, and clears when the room closes. The host can use **Kick** next to a player to remove them while the room stays open.
 
+The host chooses the shared room background and music. Each player controls **Play music** and **Chat sound** for their own browser. New messages you miss show an unread count, which you can tap to jump to chat.
+
 ## Run locally
 
 From this folder, start a static HTTP server and open [the local game](http://localhost:8000/). Two or three tabs on the same computer can test the invite flow. For a phone or another device, use the published HTTPS URL so both devices can open the same page.
