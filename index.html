@@ -8,7 +8,7 @@
   <title>Planet IH</title>
   <link rel="preload" href="./assets/avatar-atlas.png?v=14" as="image">
   <link rel="stylesheet" href="./style.css?v=10">
-  <script type="module" src="./game.js?v=14"></script>
+  <script type="module" src="./game.js?v=15"></script>
 </head>
 <body>
   <main>
@@ -50,7 +50,8 @@
             <label for="invite-code">Send this link to one friend</label>
             <textarea id="invite-code" rows="2" readonly spellcheck="false"></textarea>
             <button id="copy-invite">Copy invite link</button>
-            <button id="discord-invite">Copy Discord invite</button>
+            <button id="discord-invite">Copy Discord invite code</button>
+            <textarea id="discord-invite-fallback" aria-label="Discord invite code to copy" rows="2" readonly spellcheck="false" hidden></textarea>
             <label for="reply-in">Paste your friend’s reply code</label>
             <textarea id="reply-in" rows="2" autocomplete="off" spellcheck="false"></textarea>
             <button id="accept" class="primary wide">Connect guest</button>
@@ -58,8 +59,13 @@
           </div>
         </div>
         <div id="joining" hidden>
+          <div id="browser-transfer" hidden>
+            <p>Opened from Discord or another app? Copy the invite link and paste it into Safari, Chrome, or your usual browser before generating a reply.</p>
+            <button id="copy-browser-invite" class="wide">Copy invite for browser</button>
+            <textarea id="browser-invite-fallback" aria-label="Invite link to copy" rows="2" readonly spellcheck="false" hidden></textarea>
+          </div>
           <div id="offer-entry">
-            <label for="offer-in">Paste the host’s invite link</label>
+            <label for="offer-in">Paste the host’s invite link or code</label>
             <textarea id="offer-in" rows="2" autocomplete="off" spellcheck="false"></textarea>
           </div>
           <button id="reply" class="primary wide">Generate reply</button>

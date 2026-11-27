@@ -1,4 +1,4 @@
-import { decodeSignal, encodeSignal } from './signaling.js?v=4';
+import { decodeSignal, encodeSignal } from './signaling.js?v=5';
 import { backdrops, defaultAmbience, tracks } from './ambience.js';
 import { cleanAvatar } from './avatar.js?v=14';
 
@@ -214,6 +214,7 @@ export class Room {
       this.tick();
     }
     if (packet?.type === 'move' && player && validPosition(packet)) {
+      if (packet.avatar && typeof packet.avatar === 'object') player.avatar = cleanAvatar(packet.avatar);
       Object.assign(player, position(packet.x, packet.y));
       this.recordPosition(player, performance.now());
     }
@@ -250,15 +251,18 @@ export class Room {
     const roster = new Map();
     for (const player of packet.players) {
       if (!validPosition(player) || typeof player.id !== 'string' || !colors.includes(player.color) || !cleanName(player.name)) return;
-      // Avatars are set once on joining. Keep the same object as movement updates arrive.
-      const avatar = (player.id === peer.id ? this.local.avatar : this.players.get(player.id)?.avatar) ?? cleanAvatar(player.avatar);
+      const avatar = player.avatar && typeof player.avatar === 'object'
+        ? cleanAvatar(player.avatar)
+        : this.players.get(player.id)?.avatar ?? cleanAvatar();
       roster.set(player.id, { id: player.id, name: cleanName(player.name), color: player.color, avatar, ...position(player.x, player.y) });
     }
     const assigned = roster.get(peer.id);
     if (!assigned) return;
+    const { avatar: localAvatar } = this.local;
+    peer.avatarPending = Object.keys(localAvatar).some(key => localAvatar[key] !== assigned.avatar[key]);
     const first = this.local.id !== peer.id;
     if (first) {
-      Object.assign(this.local, assigned);
+      Object.assign(this.local, assigned, { avatar: localAvatar });
     }
     const rosterChanged = roster.size !== this.players.size || [...roster.values()].some(player => this.players.get(player.id)?.name !== player.name);
     roster.set(peer.id, this.local);
@@ -306,8 +310,8 @@ export class Room {
 
   tick() {
     if (this.host && this.local.id === this.host.id) {
-      const { x, y } = this.local;
-      send(this.host.channel, JSON.stringify({ type: 'move', x, y }));
+      const { x, y, avatar } = this.local;
+      send(this.host.channel, JSON.stringify({ type: 'move', x, y, avatar: this.host.avatarPending ? avatar : undefined }));
     }
     if (this.guests.size) {
       const state = JSON.stringify({ type: 'state', players: [...this.players.values()], ambience: this.ambience });

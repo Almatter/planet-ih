@@ -17,11 +17,11 @@ For hair that straddles the face, unhide **Rear hair** to position a copy behind
 ## Join a room
 
 1. On the game page, enter a display name and choose **Host room**, then **Create invite**.
-2. Send the invite link privately to one friend. They open it in their browser, enter a name, and select **Generate reply**.
+2. Send the invite link or code privately to one friend. They open the link in their browser, or open Planet IH and paste the code under **Join room**, then choose a name and avatar before selecting **Generate reply**.
 3. Have them send the reply code back. Paste it into the host page and choose **Connect guest**.
 4. Create a fresh invite for each additional friend. Keep the host tab open for the life of the room. On a phone, the join controls appear above the field. Open the invite in Safari or Chrome and return to the game after sending the reply. Planet IH has no countdown for swapping codes, though mobile browsers can still suspend or discard a tab left in the background.
 
-For Discord, use **Copy Discord invite** to paste a clickable **Join Planet IH** link with the code hidden in the URL. **Copy Discord reply** formats the reply as a code block. The host can paste the code by itself or copy and paste the whole Discord message.
+Use **Copy Discord invite code** to send a code block that your friend can paste into **Join room** in their browser. **Copy Discord reply** also formats the reply as a code block. Both fields accept the code by itself or with the surrounding backticks. If a link opens inside Discord or another app, select **Copy invite for browser** and paste it into your usual browser’s address bar before generating a reply.
 
 Room chat allows up to 100 characters per message. New messages appear in speech bubbles beside players for a few seconds. The fixed-height history scrolls, is available to later arrivals, and clears when the room closes. The host can **Mute** a guest for a specified duration or **Kick** them. A muted guest can keep playing and reading chat, and can see how long remains on their mute.
 

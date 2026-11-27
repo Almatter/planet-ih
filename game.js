@@ -1,4 +1,4 @@
-import { Room, capacity, chatLimit, maxMuteSeconds, cleanName, colors, width, height, position } from './room.js?v=14';
+import { Room, capacity, chatLimit, maxMuteSeconds, cleanName, colors, width, height, position } from './room.js?v=15';
 import { avatarArtReady, avatarBounds, avatarOptions, cleanAvatar, drawAvatar, setPublishedAvatarLayout, walkPose } from './avatar.js?v=14';
 import { loadAvatarLayout } from './avatar-layout.js?v=14';
 import { backdrops, defaultAmbience, tracks } from './ambience.js';
@@ -298,6 +298,7 @@ function setMode(next) {
   byId('choices').hidden = mode !== 'solo';
   byId('hosting').hidden = mode !== 'host';
   byId('joining').hidden = mode !== 'join';
+  byId('browser-transfer').hidden = mode !== 'join' || byId('reply').disabled || !byId('browser-invite-fallback').value;
   byId('leave').hidden = mode === 'solo';
   byId('leave').textContent = mode === 'host' ? 'Close room' : mode === 'join' ? 'Cancel join' : 'Leave room';
   byId('room-name').hidden = mode === 'guest';
@@ -359,6 +360,8 @@ function clearInvite() {
   inviteId = undefined;
   byId('offer').hidden = true;
   byId('invite-code').value = '';
+  byId('discord-invite-fallback').value = '';
+  byId('discord-invite-fallback').hidden = true;
   byId('reply-in').value = '';
   byId('reply-in').readOnly = false;
   byId('accept').disabled = false;
@@ -403,6 +406,8 @@ function reset(message) {
   byId('offer-in').value = '';
   byId('offer-in').readOnly = false;
   byId('reply-code').value = '';
+  byId('browser-invite-fallback').value = '';
+  byId('browser-invite-fallback').hidden = true;
   byId('answer').hidden = true;
   byId('reply').hidden = false;
   byId('reply').textContent = 'Generate reply';
@@ -414,10 +419,19 @@ function reset(message) {
 }
 
 function showJoin(invite = '') {
-  setMode('join');
   byId('offer-in').value = invite;
   byId('offer-entry').hidden = Boolean(invite);
-  setStatus(invite ? 'Choose a name and avatar, then generate a reply.' : 'Paste an invite link from the host to join.');
+  byId('browser-invite-fallback').value = invite ? inviteUrl(invite) : '';
+  byId('browser-invite-fallback').hidden = true;
+  setMode('join');
+  setStatus(invite ? 'Choose a name and avatar, then generate a reply.' : 'Paste an invite link or code from the host to join.');
+}
+
+function inviteUrl(token) {
+  const url = new URL(location.href);
+  url.search = '';
+  url.hash = /^[Ii]\./.test(token) ? token : new URLSearchParams({ invite: token }).toString();
+  return url.href;
 }
 
 nameInput.addEventListener('input', () => {
@@ -446,12 +460,10 @@ byId('invite').addEventListener('click', async () => {
     const { id, token } = await activeRoom.offer();
     if (activeRoom !== room) return;
     inviteId = id;
-    const url = new URL(location.href);
-    url.search = '';
-    url.hash = token;
-    byId('invite-code').value = url.href;
+    byId('invite-code').value = inviteUrl(token);
+    byId('discord-invite-fallback').value = '```\n' + token + '\n```';
     byId('offer').hidden = false;
-    setStatus('Send the link in a private chat and ask your friend to send back their reply code.');
+    setStatus('Send the invite in a private chat and ask your friend to send back their reply code.');
   } catch (error) {
     if (activeRoom !== room) return;
     clearInvite();
@@ -514,19 +526,24 @@ byId('reply').addEventListener('click', async () => {
 });
 
 for (const [buttonId, fieldId] of [
-  ['copy-invite', 'invite-code'], ['discord-invite', 'invite-code'],
+  ['copy-invite', 'invite-code'], ['discord-invite', 'discord-invite-fallback'],
+  ['copy-browser-invite', 'browser-invite-fallback'],
   ['copy-reply', 'reply-code'], ['discord-reply', 'reply-code'],
 ]) {
   byId(buttonId).addEventListener('click', async () => {
     const field = byId(fieldId);
-    const isInvite = fieldId === 'invite-code';
     let text = field.value;
-    if (buttonId === 'discord-invite') text = `[Join Planet IH](${text})`;
     if (buttonId === 'discord-reply') text = '```\n' + text + '\n```';
     try {
       await navigator.clipboard.writeText(text);
-      setStatus(isInvite ? 'Invite copied. Send it to one friend.' : 'Reply copied. Send it to the host, then come back to this tab.');
+      const messages = {
+        'copy-invite': 'Invite link copied. Send it to one friend.',
+        'discord-invite': 'Invite code copied. Your friend can copy it from Discord and paste it under Join room in their browser.',
+        'copy-browser-invite': 'Invite copied. Paste it into your browser’s address bar.',
+      };
+      setStatus(messages[buttonId] ?? 'Reply copied. Send it to the host, then come back to this tab.');
     } catch {
+      field.hidden = false;
       field.focus();
       field.select();
       setStatus('Text selected. Use your browser’s copy command.');

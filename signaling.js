@@ -166,6 +166,6 @@ export async function decodeSignal(input, type) {
     if (data.type !== type || !uuidCheck.test(data.id) || typeof data.sdp !== 'string' || !data.sdp.startsWith('v=0')) throw new Error('Invalid signal');
     return { ...data, version };
   } catch {
-    throw new Error(type === 'offer' ? 'Paste the full invite link from the host.' : 'Paste the full reply code from your guest.');
+    throw new Error(type === 'offer' ? 'Paste the full invite link or code from the host.' : 'Paste the full reply code from your guest.');
   }
 }
