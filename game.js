@@ -1,4 +1,4 @@
-import { Room, capacity, cleanName, colors, width, height, position } from './room.js';
+import { Room, capacity, cleanName, colors, width, height, position } from './room.js?v=2';
 
 const byId = id => document.getElementById(id);
 const canvas = byId('field');
@@ -306,7 +306,7 @@ function frame(now) {
   move(new Set([...Array.from(keys, key => directions[key]), ...pointerDirections.values()]), Math.min(0.05, Math.max(0, (now - lastFrame) / 1000)));
   lastFrame = now;
   context.drawImage(field, 0, 0);
-  const players = [...room.players.values()].sort((a, b) => a.y - b.y);
+  const players = room.displayPlayers(now).sort((a, b) => a.y - b.y);
   for (const player of players) drawPlayer(player);
   drawLabels(players, labelSize);
   requestAnimationFrame(frame);

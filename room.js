@@ -1,5 +1,8 @@
 const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
-const prefix = 'planet-ih-1.';
+const plainPrefix = 'planet-ih-1.';
+const compactPrefix = 'planet-ih-2.';
+const maxSignalSize = 50000;
+const playbackDelay = 110;
 export const colors = ['#baf592', '#ffc375', '#74ddf6', '#f995bd', '#c7afff', '#f8e979', '#6ff0ce', '#ff927e'];
 export const capacity = colors.length;
 export const width = 720;
@@ -17,21 +20,52 @@ export function position(x, y) {
   };
 }
 
-function encode(id, description) {
-  const bytes = new TextEncoder().encode(JSON.stringify({ id, type: description.type, sdp: description.sdp }));
+async function encode(id, description, allowCompression = true) {
+  const payload = JSON.stringify({ id, type: description.type, sdp: description.sdp });
+  let bytes = new TextEncoder().encode(payload);
+  let prefix = plainPrefix;
+  if (allowCompression && globalThis.CompressionStream && globalThis.DecompressionStream) {
+    const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate'));
+    const compressed = new Uint8Array(await new Response(stream).arrayBuffer());
+    if (compressed.length < bytes.length) {
+      bytes = compressed;
+      prefix = compactPrefix;
+    }
+  }
   return prefix + btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join('')).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function decode(input, type) {
+async function readCompressedSignal(bytes) {
+  const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate')).getReader();
+  const decoder = new TextDecoder();
+  let size = 0;
+  let text = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) return text + decoder.decode();
+    size += value.length;
+    if (size > maxSignalSize) {
+      await reader.cancel();
+      throw new Error('Signal too large');
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+}
+
+async function decode(input, type) {
   const fragments = input.trim().split('#');
   const token = fragments.at(-1).replace(/^invite=/, '');
+  const compressed = token.startsWith(compactPrefix);
+  if (compressed && !globalThis.DecompressionStream) throw new Error('Open this invite or reply in a current browser.');
   try {
-    if (token.length > 50000 || !token.startsWith(prefix)) throw new Error();
+    const prefix = compressed ? compactPrefix : plainPrefix;
+    if (token.length > maxSignalSize || !token.startsWith(prefix)) throw new Error();
     const base64 = token.slice(prefix.length).replace(/-/g, '+').replace(/_/g, '/');
     const bytes = Uint8Array.from(atob(base64), char => char.charCodeAt(0));
-    const data = JSON.parse(new TextDecoder().decode(bytes));
+    const payload = compressed ? await readCompressedSignal(bytes) : new TextDecoder().decode(bytes);
+    const data = JSON.parse(payload);
     if (data.type !== type || !/^[a-f0-9-]{36}$/.test(data.id) || typeof data.sdp !== 'string' || !data.sdp.startsWith('v=0')) throw new Error();
-    return data;
+    return { ...data, compressed };
   } catch {
     throw new Error(type === 'offer' ? 'Paste the full invite link from the host.' : 'Paste the full reply code from your guest.');
   }
@@ -73,6 +107,29 @@ export class Room {
     this.onDrop = onDrop;
     this.players = new Map([[local.id, local]]);
     this.guests = new Map();
+    this.positionSamples = new Map();
+    this.closed = false;
+  }
+
+  recordPosition(player, time) {
+    if (player.id === this.local.id) return;
+    const samples = this.positionSamples.get(player.id) ?? [];
+    samples.push({ x: player.x, y: player.y, time });
+    if (samples.length > 12) samples.shift();
+    this.positionSamples.set(player.id, samples);
+  }
+
+  displayPlayers(now) {
+    const playbackTime = now - playbackDelay;
+    return [...this.players.values()].map(player => {
+      const samples = this.positionSamples.get(player.id);
+      if (!samples?.length) return player;
+      while (samples.length > 1 && samples[1].time <= playbackTime) samples.shift();
+      const [from, to] = samples;
+      if (!to || playbackTime <= from.time) return { ...player, x: from.x, y: from.y };
+      const progress = (playbackTime - from.time) / (to.time - from.time);
+      return { ...player, x: from.x + (to.x - from.x) * progress, y: from.y + (to.y - from.y) * progress };
+    });
   }
 
   makePeer(id) {
@@ -97,7 +154,8 @@ export class Room {
       await peer.connection.setLocalDescription(await peer.connection.createOffer());
       await gather(peer.connection);
       if (!this.guests.has(id)) throw new Error('Invite canceled.');
-      return { id, token: encode(id, peer.connection.localDescription) };
+      const token = await encode(id, peer.connection.localDescription);
+      return { id, token };
     } catch (error) {
       this.drop(peer);
       throw error;
@@ -105,7 +163,7 @@ export class Room {
   }
 
   async accept(id, input) {
-    const reply = decode(input, 'answer');
+    const reply = await decode(input, 'answer');
     const peer = this.guests.get(id);
     if (!peer || reply.id !== id) throw new Error('That reply belongs to a different invite.');
     await peer.connection.setRemoteDescription({ type: reply.type, sdp: reply.sdp });
@@ -115,7 +173,8 @@ export class Room {
   }
 
   async answer(input) {
-    const offer = decode(input, 'offer');
+    const offer = await decode(input, 'offer');
+    if (this.closed) throw new Error('Join canceled.');
     const peer = this.makePeer(offer.id);
     this.host = peer;
     const { connection } = peer;
@@ -125,7 +184,7 @@ export class Room {
       await connection.setLocalDescription(await connection.createAnswer());
       await gather(connection);
       if (this.host !== peer) throw new Error('Join canceled.');
-      return encode(peer.id, connection.localDescription);
+      return await encode(peer.id, connection.localDescription, offer.compressed);
     } catch (error) {
       this.drop(peer);
       throw error;
@@ -164,12 +223,15 @@ export class Room {
         name = `${Array.from(base).slice(0, 15).join('')} ${number}`;
       }
       const color = colors.find(candidate => roster.every(entry => entry.color !== candidate));
-      this.players.set(peer.id, { id: peer.id, name, color, x: width / 2 + 34 * roster.length, y: height / 2 + 45 });
+      const guest = { id: peer.id, name, color, x: width / 2 + 34 * roster.length, y: height / 2 + 45 };
+      this.players.set(peer.id, guest);
+      this.recordPosition(guest, performance.now());
       this.onChange(true);
       this.tick();
     }
     if (packet?.type === 'move' && player && validPosition(packet)) {
       Object.assign(player, position(packet.x, packet.y));
+      this.recordPosition(player, performance.now());
     }
   }
 
@@ -190,6 +252,11 @@ export class Room {
     const rosterChanged = roster.size !== this.players.size || [...roster.values()].some(player => this.players.get(player.id)?.name !== player.name);
     roster.set(peer.id, this.local);
     this.players = roster;
+    const now = performance.now();
+    for (const id of this.positionSamples.keys()) {
+      if (!roster.has(id)) this.positionSamples.delete(id);
+    }
+    for (const player of roster.values()) this.recordPosition(player, now);
     if (first || rosterChanged) this.onChange(first);
   }
 
@@ -211,12 +278,14 @@ export class Room {
     if (wasHost) this.host = null;
     else if (!this.guests.delete(peer.id)) return;
     const wasPlaying = wasHost ? this.local.id === peer.id : this.players.delete(peer.id);
+    this.positionSamples.delete(peer.id);
     clearTimeout(peer.timer);
     peer.connection.close();
     if (notify) this.onDrop(wasHost, peer.id, wasPlaying);
   }
 
   close() {
+    this.closed = true;
     if (this.host) this.drop(this.host);
     for (const peer of this.guests.values()) this.drop(peer);
   }
