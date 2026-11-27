@@ -1,5 +1,6 @@
 import { decodeSignal, encodeSignal } from './signaling.js?v=4';
 import { backdrops, defaultAmbience, tracks } from './ambience.js';
+import { cleanAvatar } from './avatar.js?v=8';
 
 const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
 const playbackDelay = 110;
@@ -9,6 +10,7 @@ export const capacity = colors.length;
 export const width = 720;
 export const height = 500;
 export const chatLimit = 100;
+export const maxMuteSeconds = 7 * 24 * 60 * 60;
 const chatBatchSize = 12;
 const floor = { left: 140, right: 580, top: 140, bottom: 427 };
 
@@ -72,18 +74,20 @@ function validPosition(player) {
 }
 
 export class Room {
-  constructor(local, onChange, onDrop, onChat, onAmbience) {
+  constructor(local, onChange, onDrop, onChat, onAmbience, onMute) {
     this.local = local;
     this.onChange = onChange;
     this.onDrop = onDrop;
     this.onChat = onChat;
     this.onAmbience = onAmbience;
+    this.onMute = onMute;
     this.players = new Map([[local.id, local]]);
     this.guests = new Map();
     this.positionSamples = new Map();
     this.chat = [];
     this.ambience = defaultAmbience;
     this.closed = false;
+    this.mutedUntil = 0;
   }
 
   applyAmbience(ambience) {
@@ -179,7 +183,7 @@ export class Room {
 
   bind(peer, channel, hosting) {
     peer.channel = channel;
-    if (!hosting) channel.addEventListener('open', () => send(channel, JSON.stringify({ type: 'hello', name: this.local.name })));
+    if (!hosting) channel.addEventListener('open', () => send(channel, JSON.stringify({ type: 'hello', name: this.local.name, avatar: this.local.avatar })));
     channel.addEventListener('message', ({ data }) => {
       const packet = readPacket(data);
       if (hosting) this.receiveGuest(peer, packet);
@@ -201,7 +205,7 @@ export class Room {
       }
       const color = colors.find(candidate => roster.every(entry => entry.color !== candidate));
       const spawn = position(width / 2 + (roster.length % 4 - 1.5) * 70, height / 2 + 53 + 58 * Math.floor(roster.length / 4));
-      const guest = { id: peer.id, name, color, ...spawn };
+      const guest = { id: peer.id, name, color, avatar: cleanAvatar(packet.avatar), ...spawn };
       this.players.set(peer.id, guest);
       peer.chatCursor = 0;
       peer.historyEnd = this.chat.length;
@@ -213,13 +217,20 @@ export class Room {
       Object.assign(player, position(packet.x, packet.y));
       this.recordPosition(player, performance.now());
     }
-    if (packet?.type === 'say' && player) this.addChat(player, chatText(packet.text));
+    if (packet?.type === 'say' && player && !this.muteRemaining(peer.id)) this.addChat(player, chatText(packet.text));
   }
 
   receiveHost(peer, packet) {
     if (this.host !== peer) return;
     if (packet?.type === 'kicked') {
       this.drop(peer, true, 'kicked');
+      return;
+    }
+    if (packet?.type === 'mute') {
+      if (!Number.isFinite(packet.remaining) || !Number.isFinite(packet.duration) || packet.remaining < 0 ||
+        packet.duration < packet.remaining || packet.duration > maxMuteSeconds * 1000) return;
+      this.mutedUntil = packet.remaining ? Date.now() + packet.remaining : 0;
+      this.onMute?.(packet.duration);
       return;
     }
     if (packet?.type === 'chat') {
@@ -239,7 +250,9 @@ export class Room {
     const roster = new Map();
     for (const player of packet.players) {
       if (!validPosition(player) || typeof player.id !== 'string' || !colors.includes(player.color) || !cleanName(player.name)) return;
-      roster.set(player.id, { id: player.id, name: cleanName(player.name), color: player.color, ...position(player.x, player.y) });
+      // Avatars are set once on joining. Keep the same object as movement updates arrive.
+      const avatar = (player.id === peer.id ? this.local.avatar : this.players.get(player.id)?.avatar) ?? cleanAvatar(player.avatar);
+      roster.set(player.id, { id: player.id, name: cleanName(player.name), color: player.color, avatar, ...position(player.x, player.y) });
     }
     const assigned = roster.get(peer.id);
     if (!assigned) return;
@@ -261,9 +274,25 @@ export class Room {
 
   say(value) {
     const text = chatText(value);
-    if (!text) return false;
+    if (!text || this.muteRemaining()) return false;
     if (this.host) return send(this.host.channel, JSON.stringify({ type: 'say', text }));
     this.addChat(this.local, text);
+    return true;
+  }
+
+  muteRemaining(id) {
+    const until = id === undefined ? this.mutedUntil : this.guests.get(id)?.mutedUntil ?? 0;
+    return Math.max(0, until - Date.now());
+  }
+
+  setMute(id, seconds) {
+    const peer = this.guests.get(id);
+    if (this.host || !peer || !this.players.has(id) || !Number.isInteger(seconds) || seconds < 0 || seconds > maxMuteSeconds) return false;
+    peer.muteDuration = seconds * 1000;
+    peer.mutedUntil = seconds ? Date.now() + peer.muteDuration : 0;
+    peer.mutePending = true;
+    this.onChange(false);
+    this.tick();
     return true;
   }
 
@@ -282,8 +311,17 @@ export class Room {
     }
     if (this.guests.size) {
       const state = JSON.stringify({ type: 'state', players: [...this.players.values()], ambience: this.ambience });
+      let muteExpired = false;
       for (const peer of this.guests.values()) {
         if (!this.players.has(peer.id) || !send(peer.channel, state)) continue;
+        const remaining = this.muteRemaining(peer.id);
+        if (peer.mutedUntil && !remaining) {
+          peer.mutedUntil = 0;
+          peer.muteDuration = 0;
+          peer.mutePending = true;
+          muteExpired = true;
+        }
+        if (peer.mutePending && send(peer.channel, JSON.stringify({ type: 'mute', remaining, duration: peer.muteDuration }))) peer.mutePending = false;
         const start = peer.chatCursor;
         if (start >= this.chat.length) continue;
         const silent = start < peer.historyEnd;
@@ -291,6 +329,7 @@ export class Room {
         const entries = this.chat.slice(start, end);
         if (send(peer.channel, JSON.stringify({ type: 'chat', start, entries, silent }))) peer.chatCursor = end;
       }
+      if (muteExpired) this.onChange(false);
     }
   }
 

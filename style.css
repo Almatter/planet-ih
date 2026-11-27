@@ -31,8 +31,8 @@ h2 { font-size: 1.1rem; }
 .bar span { white-space: nowrap; }
 .field-bar { flex-wrap: wrap; gap: 4px 16px; }
 .field-options { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
-canvas { width: 100%; height: auto; display: block; background: #79502f url('./assets/tea-house.jpg') center / 100% 100% no-repeat; cursor: crosshair; touch-action: manipulation; }
-canvas[data-backdrop="moonlit"] { background-color: #3d345d; background-image: url('./assets/moonlit-tea-house.jpg'); }
+#field { width: 100%; height: auto; display: block; background: #79502f url('./assets/tea-house.jpg') center / 100% 100% no-repeat; cursor: crosshair; touch-action: manipulation; }
+#field[data-backdrop="moonlit"] { background-color: #3d345d; background-image: url('./assets/moonlit-tea-house.jpg'); }
 .panel { padding: 16px; min-width: 0; }
 label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: .9rem; }
 input, textarea, select { width: 100%; min-width: 0; border: 1px solid var(--edge); border-radius: 7px; background: var(--inset); color: inherit; padding: 9px; font: inherit; }
@@ -53,17 +53,29 @@ button:disabled { opacity: .55; cursor: default; }
 .wide { width: 100%; }
 #status { margin-top: 12px; line-height: 1.45; }
 #players { padding: 0; margin: 10px 0 0; list-style: none; display: grid; gap: 8px; }
-#players li { display: flex; align-items: center; gap: 8px; overflow-wrap: anywhere; }
-.kick { margin-left: auto; min-width: 49px; color: #ffb5a6; }
+#players li { display: flex; align-items: center; gap: 7px; overflow-wrap: anywhere; }
+.player-name { min-width: 0; flex: 1; }
+.moderation { display: flex; gap: 5px; flex: 0 0 auto; }
+.moderation button { padding-inline: 8px; }
+.kick { color: #ffb5a6; }
 .swatch { width: 13px; height: 13px; border-radius: 3px; flex: 0 0 auto; }
 .chat { padding: 0 16px 16px; border-top: 1px solid var(--edge); }
 .chat-heading { padding-inline: 0; }
-#chat-history { padding: 12px; overflow-y: auto; overflow-wrap: anywhere; max-height: 210px; min-height: 96px; background: var(--inset); border: 1px solid var(--edge); border-radius: 7px; }
+#chat-history { padding: 12px; overflow-y: auto; overflow-wrap: anywhere; block-size: 9rem; scrollbar-gutter: stable; background: var(--inset); border: 1px solid var(--edge); border-radius: 7px; }
 #chat-log { list-style: none; display: grid; gap: 7px; padding: 0; margin: 0; }
 #chat-log strong { margin-inline-end: .5em; }
 #chat-end { height: 1px; }
 #chat-form { display: flex; gap: 8px; margin-top: 8px; }
 #chat-status { margin-top: 8px; }
+#mute-notice { margin-top: 8px; color: #ffbea9; font-size: .9rem; }
+#avatar-editor { margin-top: 14px; border: 1px solid var(--edge); border-radius: 8px; padding: 0 10px 10px; }
+#avatar-editor summary { min-height: 44px; padding: 10px 0; line-height: 24px; cursor: pointer; }
+#avatar-editor:not([open]) { padding-bottom: 0; }
+#avatar-preview { display: block; width: 100%; height: auto; background: radial-gradient(ellipse at 50% 90%, #735447, #33261f 72%); border-radius: 6px; }
+#avatar-fields, .timeout-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 8px; }
+#avatar-fields select { padding-inline: 4px; font-size: .9rem; }
+#mute-dialog { width: min(340px, calc(100% - 24px)); padding: 16px; color: inherit; background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; }
+#mute-dialog::backdrop { background: #120b09bb; }
 #chat-notice { position: fixed; z-index: 1; inset: auto max(14px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) auto; background: var(--accent); color: var(--inset); border-color: var(--accent); box-shadow: 0 3px 15px #0008; }
 @media (max-width: 760px) {
   main { padding-top: 14px; }

@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#1c1713">
   <meta name="description" content="Meet friends in the Isekai Hell tea house.">
   <title>Planet IH</title>
-  <link rel="stylesheet" href="./style.css?v=7">
-  <script type="module" src="./game.js?v=7"></script>
+  <link rel="stylesheet" href="./style.css?v=8">
+  <script type="module" src="./game.js?v=8"></script>
 </head>
 <body>
   <main>
@@ -27,6 +27,11 @@
           <button id="host" class="primary">Host room</button>
           <button id="join">Join room</button>
         </div>
+        <details id="avatar-editor">
+          <summary>Customize avatar</summary>
+          <canvas id="avatar-preview" width="266" height="126" aria-label="Preview of your avatar"></canvas>
+          <div id="avatar-fields"></div>
+        </details>
         <div id="hosting" hidden>
           <div class="host-ambience">
             <div><label for="backdrop">Room background</label><select id="backdrop"></select></div>
@@ -72,7 +77,7 @@
             <label class="name-toggle"><input id="hide-names" type="checkbox"> Hide names</label>
           </div>
         </div>
-        <canvas id="field" width="720" height="500" aria-label="Tea house with named player blocks. Click or tap the floor to move. Keyboard movement is available with WASD or arrow keys."></canvas>
+        <canvas id="field" width="720" height="500" aria-label="Tea house with player avatars. Click or tap the floor to move. Keyboard movement is available with WASD or arrow keys."></canvas>
         <section class="chat" aria-labelledby="chat-title">
           <div class="bar chat-heading"><h2 id="chat-title">Room chat</h2><span id="chat-count">0 / 100</span></div>
           <div id="chat-history" role="log" aria-labelledby="chat-title" tabindex="0">
@@ -85,6 +90,7 @@
             <button id="send-chat" class="primary" disabled>Send</button>
           </form>
           <p id="chat-status" role="status" hidden></p>
+          <p id="mute-notice" hidden><span id="mute-reason" role="status"></span> <span id="mute-countdown"></span></p>
         </section>
       </section>
       <section class="panel roster-panel" aria-labelledby="players-title">
@@ -93,6 +99,16 @@
       </section>
     </div>
     <button id="chat-notice" type="button" hidden></button>
+    <dialog id="mute-dialog" aria-labelledby="mute-title">
+      <h2 id="mute-title">Mute player</h2>
+      <form id="mute-form">
+        <div class="timeout-fields">
+          <div><label for="mute-time">Duration</label><input id="mute-time" type="number" inputmode="numeric" min="1" step="1" required></div>
+          <div><label for="mute-unit">Unit</label><select id="mute-unit"><option value="60">Minutes</option><option value="1">Seconds</option><option value="3600">Hours</option></select></div>
+        </div>
+        <div class="actions"><button id="cancel-mute" type="button">Cancel</button><button class="primary">Mute chat</button></div>
+      </form>
+    </dialog>
   </main>
 </body>
 </html>

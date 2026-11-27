@@ -1,6 +1,6 @@
 # Planet IH
 
-Planet IH is a browser multiplayer prototype for [Isekai Hell](https://github.com/Almatter/IsekaiHell). Up to eight players can meet in a medieval fantasy tea house. Each player gets a distinct name and block color. Click or tap the floor to move. WASD and arrow keys also work.
+Planet IH is a browser multiplayer prototype for [Isekai Hell](https://github.com/Almatter/IsekaiHell). Up to eight players can meet in a medieval fantasy tea house. Open **Customize avatar** before hosting or joining. The three bodies have their own four-direction walk cycles. The medium body is the furniture reference, with small at half scale and large at 1.5×. Your avatar choices and display name are saved in your browser. Click or tap the floor to move. WASD and arrow keys also work.
 
 ## Join a room
 
@@ -11,7 +11,7 @@ Planet IH is a browser multiplayer prototype for [Isekai Hell](https://github.co
 
 For Discord, use **Copy Discord invite** to paste a clickable **Join Planet IH** link with the code hidden in the URL. **Copy Discord reply** formats the reply as a code block. The host can paste the code by itself or copy and paste the whole Discord message.
 
-Room chat allows up to 100 characters per message. New messages appear in speech bubbles beside players for a few seconds. Room history is kept in the host's browser, appears for later arrivals, and clears when the room closes. The host can use **Kick** next to a player to remove them while the room stays open.
+Room chat allows up to 100 characters per message. New messages appear in speech bubbles beside players for a few seconds. The fixed-height history scrolls, is available to later arrivals, and clears when the room closes. The host can **Mute** a guest for a specified duration or **Kick** them. A muted guest can keep playing and reading chat, and can see how long remains on their mute.
 
 The host chooses the shared room background and music. Each player controls **Play music** and **Chat sound** for their own browser. New messages you miss show an unread count, which you can tap to jump to chat.
 

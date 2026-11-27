@@ -1,4 +1,5 @@
-import { Room, capacity, chatLimit, cleanName, colors, width, height, position } from './room.js?v=7';
+import { Room, capacity, chatLimit, maxMuteSeconds, cleanName, colors, width, height, position } from './room.js?v=8';
+import { avatarBounds, avatarOptions, cleanAvatar, drawAvatar, walkPose } from './avatar.js?v=8';
 import { backdrops, defaultAmbience, tracks } from './ambience.js';
 import { RoomAudio } from './room-audio.js';
 
@@ -18,15 +19,71 @@ const chatHistory = byId('chat-history');
 const chatLog = byId('chat-log');
 const chatNotice = byId('chat-notice');
 const chatEnd = byId('chat-end');
+const avatarEditor = byId('avatar-editor');
+const preview = byId('avatar-preview');
+const previewContext = preview.getContext('2d');
+const muteDialog = byId('mute-dialog');
+const muteTime = byId('mute-time');
+const muteUnit = byId('mute-unit');
 const pageTitle = document.title;
 const keys = new Set();
 const bubbles = new Map();
+let poses = new Map();
 const directions = { w: 'up', a: 'left', s: 'down', d: 'right', arrowup: 'up', arrowleft: 'left', arrowdown: 'down', arrowright: 'right' };
 let mode = 'solo';
 let room;
 let inviteId;
 let destination;
 let unread = 0;
+let mutingId;
+let playerAvatar;
+
+function loadProfile() {
+  try {
+    return JSON.parse(localStorage.getItem('planet-ih-profile'));
+  } catch {
+    return null;
+  }
+}
+
+function saveProfile() {
+  try {
+    localStorage.setItem('planet-ih-profile', JSON.stringify({ name: cleanName(nameInput.value), avatar: playerAvatar }));
+  } catch {
+    // The profile still applies to the current tab.
+  }
+}
+
+const profile = loadProfile();
+nameInput.value = cleanName(profile?.name);
+playerAvatar = cleanAvatar(profile?.avatar);
+
+function updateAvatarPreview() {
+  previewContext.clearRect(0, 0, preview.width, preview.height);
+  const bounds = avatarBounds({ avatar: playerAvatar, x: 0, y: 0 });
+  const zoom = 94 / -bounds.top;
+  drawAvatar(previewContext, playerAvatar, colors[0], preview.width / 2, preview.height - 14, 'south', 0, zoom);
+}
+
+for (const [key, choices] of Object.entries(avatarOptions)) {
+  const field = document.createElement('div');
+  const label = document.createElement('label');
+  const select = document.createElement('select');
+  select.id = `avatar-${key}`;
+  label.htmlFor = select.id;
+  label.textContent = key === 'hairColor' ? 'Hair color' : key.charAt(0).toUpperCase() + key.slice(1);
+  for (const value of choices) select.add(new Option(value, value));
+  select.value = playerAvatar[key];
+  select.addEventListener('change', () => {
+    playerAvatar = { ...playerAvatar, [key]: select.value };
+    room.local.avatar = playerAvatar;
+    saveProfile();
+    updateAvatarPreview();
+  });
+  field.append(label, select);
+  byId('avatar-fields').append(field);
+}
+updateAvatarPreview();
 
 function setPreference(input, fallback) {
   const key = `planet-ih-${input.id}`;
@@ -82,8 +139,16 @@ function nearChatBottom() {
 function updateUnread(count) {
   unread = count;
   document.title = unread ? `(${unread}) ${pageTitle}` : pageTitle;
-  chatNotice.hidden = !unread;
-  chatNotice.textContent = unread === 1 ? '1 new chat message' : `${unread} new chat messages`;
+  renderChatNotice();
+}
+
+function renderChatNotice() {
+  const remaining = room?.muteRemaining() ?? 0;
+  const muteAlert = remaining && !canSeeNewestMessage() ? `Chat muted · ${muteLength(remaining)} left` : '';
+  const unreadAlert = unread === 1 ? '1 new chat message' : unread ? `${unread} new chat messages` : '';
+  const alert = muteAlert || unreadAlert;
+  chatNotice.hidden = !alert;
+  if (chatNotice.textContent !== alert) chatNotice.textContent = alert;
 }
 
 function markChatRead() {
@@ -110,6 +175,64 @@ function setStatus(message) {
   status.textContent = message;
 }
 
+function muteLength(ms) {
+  const seconds = Math.ceil(ms / 1000);
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor(seconds % 3600 / 60);
+  const remainder = seconds % 60;
+  return [hours && `${hours}h`, minutes && `${minutes}m`, remainder && `${remainder}s`].filter(Boolean).join(' ');
+}
+
+function updateMuteLimit() {
+  muteTime.max = String(Math.floor(maxMuteSeconds / Number(muteUnit.value)));
+}
+
+function openMute(player) {
+  mutingId = player.id;
+  byId('mute-title').textContent = `Mute ${player.name}`;
+  muteTime.value = '';
+  muteUnit.value = '60';
+  updateMuteLimit();
+  muteDialog.showModal();
+  muteTime.focus();
+}
+
+muteUnit.addEventListener('change', updateMuteLimit);
+byId('cancel-mute').addEventListener('click', () => muteDialog.close());
+byId('mute-form').addEventListener('submit', event => {
+  event.preventDefault();
+  if (!event.target.reportValidity()) return;
+  const player = room.players.get(mutingId);
+  const seconds = Number(muteTime.value) * Number(muteUnit.value);
+  muteDialog.close();
+  if (mode === 'host' && player && seconds > 0 && room.setMute(player.id, seconds)) {
+    setStatus(`${player.name} was muted for ${muteLength(seconds * 1000)}.`);
+  }
+});
+
+function updateChatAccess() {
+  const remaining = room?.muteRemaining() ?? 0;
+  const canChat = mode === 'host' || mode === 'guest';
+  const disabled = !canChat || remaining > 0;
+  if (messageInput.disabled !== disabled) {
+    messageInput.disabled = disabled;
+    byId('send-chat').disabled = disabled;
+  }
+  const placeholder = remaining ? 'Chat muted' : canChat ? 'Write a message' : 'Host or join to chat';
+  if (messageInput.placeholder !== placeholder) messageInput.placeholder = placeholder;
+  byId('mute-notice').hidden = !remaining;
+  const countdown = remaining ? `${muteLength(remaining)} remaining.` : '';
+  if (byId('mute-countdown').textContent !== countdown) byId('mute-countdown').textContent = countdown;
+  renderChatNotice();
+}
+
+function showMute(duration) {
+  byId('mute-reason').textContent = duration ? `The host muted your chat for ${muteLength(duration)}.` : '';
+  byId('chat-status').hidden = true;
+  updateChatAccess();
+}
+setInterval(updateChatAccess, 250);
+
 function renderRoster() {
   const players = [...room.players.values()];
   byId('count').textContent = `${players.length} ${players.length === 1 ? 'player' : 'players'}`;
@@ -118,8 +241,21 @@ function renderRoster() {
     const swatch = document.createElement('span');
     swatch.className = 'swatch';
     swatch.style.backgroundColor = player.color;
-    item.append(swatch, player.name + (player === room.local ? ' (you)' : ''));
+    const name = document.createElement('span');
+    name.className = 'player-name';
+    name.textContent = player.name + (player === room.local ? ' (you)' : '');
+    item.append(swatch, name);
     if (mode === 'host' && player !== room.local) {
+      const moderation = document.createElement('span');
+      moderation.className = 'moderation';
+      const mute = document.createElement('button');
+      const muted = Boolean(room.muteRemaining(player.id));
+      mute.textContent = muted ? 'Unmute' : 'Mute';
+      mute.setAttribute('aria-label', `${mute.textContent} ${player.name}`);
+      mute.addEventListener('click', () => {
+        if (!room.muteRemaining(player.id)) openMute(player);
+        else if (room.setMute(player.id, 0)) setStatus(`${player.name} can chat again.`);
+      });
       const kick = document.createElement('button');
       kick.className = 'kick';
       kick.textContent = 'Kick';
@@ -128,7 +264,8 @@ function renderRoster() {
         room.kick(player.id);
         setStatus(`${player.name} was removed from the room.`);
       });
-      item.append(kick);
+      moderation.append(mute, kick);
+      item.append(moderation);
     }
     return item;
   }));
@@ -144,11 +281,10 @@ function setMode(next) {
   byId('leave').textContent = mode === 'host' ? 'Close room' : mode === 'join' ? 'Cancel join' : 'Leave room';
   byId('room-name').hidden = mode === 'guest';
   nameInput.disabled = mode === 'join' && (byId('reply').disabled || !byId('answer').hidden) || mode === 'guest';
+  avatarEditor.hidden = mode === 'host' || mode === 'guest' || (mode === 'join' && byId('reply').disabled);
   const canChat = mode === 'host' || mode === 'guest';
   document.querySelector('.audio-options').hidden = !canChat;
-  messageInput.disabled = !canChat;
-  messageInput.placeholder = canChat ? 'Write a message' : 'Host or join to chat';
-  byId('send-chat').disabled = !canChat;
+  updateChatAccess();
   updateAmbience(room?.ambience ?? defaultAmbience);
 }
 
@@ -212,7 +348,9 @@ function clearInvite() {
 
 function reset(message) {
   room?.close();
+  if (muteDialog.open) muteDialog.close();
   destination = undefined;
+  poses.clear();
   bubbles.clear();
   chatLog.replaceChildren();
   updateUnread(0);
@@ -220,7 +358,7 @@ function reset(message) {
   byId('chat-status').hidden = true;
   messageInput.value = '';
   updateMessageCount();
-  const local = { id: 'local', name: cleanName(nameInput.value) || 'Traveler', color: colors[0], x: width / 2, y: height / 2 };
+  const local = { id: 'local', name: cleanName(nameInput.value) || 'Traveler', color: colors[0], avatar: playerAvatar, x: width / 2, y: height / 2 };
   room = new Room(local, joined => {
     if (joined && mode === 'join') {
       setMode('guest');
@@ -239,7 +377,7 @@ function reset(message) {
     if (id === inviteId) clearInvite();
     setStatus(wasPlaying ? 'A guest left the room.' : 'The browser could not connect. Ask your guest to return to the game, then create a fresh invite.');
     renderRoster();
-  }, showChat, updateAmbience);
+  }, showChat, updateAmbience, showMute);
   clearInvite();
   byId('offer-in').value = '';
   byId('offer-in').readOnly = false;
@@ -249,6 +387,7 @@ function reset(message) {
   byId('reply').textContent = 'Generate reply';
   byId('reply').disabled = false;
   setMode('solo');
+  showMute(0);
   setStatus(message);
   renderRoster();
 }
@@ -257,7 +396,7 @@ function showJoin(invite = '') {
   setMode('join');
   byId('offer-in').value = invite;
   byId('offer-entry').hidden = Boolean(invite);
-  setStatus(invite ? 'Choose a display name and generate a reply.' : 'Paste an invite link from the host to join.');
+  setStatus(invite ? 'Choose a name and avatar, then generate a reply.' : 'Paste an invite link from the host to join.');
 }
 
 nameInput.addEventListener('input', () => {
@@ -268,6 +407,7 @@ nameInput.addEventListener('input', () => {
     return;
   }
   room.local.name = requested;
+  saveProfile();
   renderRoster();
 });
 byId('host').addEventListener('click', () => {
@@ -375,7 +515,7 @@ for (const [buttonId, fieldId] of [
 
 addEventListener('keydown', event => {
   const key = event.key.toLowerCase();
-  if (!Object.hasOwn(directions, key) || event.target.closest('input, textarea, [contenteditable]') || event.metaKey || event.ctrlKey || event.altKey) return;
+  if (!Object.hasOwn(directions, key) || event.target.closest('input, textarea, select, dialog, #chat-history, [contenteditable]') || event.metaKey || event.ctrlKey || event.altKey) return;
   event.preventDefault();
   keys.add(key);
   destination = undefined;
@@ -410,23 +550,13 @@ function move(active, seconds) {
   Object.assign(room.local, position(x + dx * distance, y + dy * distance));
 }
 
-function drawPlayer(player) {
-  const { x, y, color } = player;
-  context.fillStyle = '#10221e';
-  context.fillRect(x - 13, y - 11, 29, 29);
-  context.fillStyle = color;
-  context.fillRect(x - 14, y - 14, 28, 28);
-  context.fillStyle = '#ffffff55';
-  context.fillRect(x - 14, y - 14, 28, 4);
-}
-
-function placeLabel(x, y, labelWidth, labelHeight, occupied, rows, spacing = labelHeight + 4) {
+function placeLabel(x, bounds, labelWidth, labelHeight, occupied, rows, spacing = labelHeight + 4) {
   const centerX = Math.max(labelWidth / 2 + 5, Math.min(width - labelWidth / 2 - 5, x));
   const left = centerX - labelWidth / 2;
   const right = left + labelWidth;
   for (let row = 0; row < rows; row++) {
     const offset = Math.floor(row / 2) * spacing;
-    const top = row % 2 === 0 ? y - 20 - labelHeight - offset : y + 22 + offset;
+    const top = row % 2 === 0 ? bounds.top - 4 - labelHeight - offset : bounds.bottom + 5 + offset;
     const bottom = top + labelHeight;
     if (top < 5 || bottom > height - 5 || occupied.some(box => left < box.right && right > box.left && top < box.bottom && bottom > box.top)) continue;
     const box = { left, right, top, bottom, centerX };
@@ -465,15 +595,16 @@ function wrapMessage(text, maxWidth) {
 }
 
 function drawOverlays(players, fontSize, now) {
-  const occupied = players.map(({ x, y }) => ({ left: x - 16, top: y - 16, right: x + 17, bottom: y + 19 }));
+  const bounds = new Map(players.map(player => [player.id, avatarBounds(player)]));
+  const occupied = [...bounds.values()];
   const labelHeight = fontSize + 7;
   context.font = `bold ${fontSize}px system-ui, sans-serif`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   if (!hideNames.checked) {
-    for (const { x, y, name } of players) {
+    for (const { x, id, name } of players) {
       const labelWidth = context.measureText(name).width + 16;
-      const box = placeLabel(x, y, labelWidth, labelHeight, occupied, players.length * 2);
+      const box = placeLabel(x, bounds.get(id), labelWidth, labelHeight, occupied, players.length * 2);
       if (!box) continue;
       context.fillStyle = '#2b1c14';
       context.fillRect(box.left, box.top, labelWidth, labelHeight);
@@ -497,7 +628,7 @@ function drawOverlays(players, fontSize, now) {
       bubble.width = Math.max(...bubble.lines.map(line => context.measureText(line).width)) + 28;
     }
     const bubbleHeight = bubble.lines.length * lineHeight + 15;
-    const box = placeLabel(player.x, player.y, bubble.width, bubbleHeight, occupied, 48, 12);
+    const box = placeLabel(player.x, bounds.get(id), bubble.width, bubbleHeight, occupied, 48, 12);
     if (!box) continue;
     const above = box.bottom < player.y;
     const edge = above ? box.bottom : box.top;
@@ -537,7 +668,13 @@ function frame(now) {
   lastFrame = now;
   context.clearRect(0, 0, width, height);
   const players = room.displayPlayers(now).sort((a, b) => a.y - b.y);
-  for (const player of players) drawPlayer(player);
+  const currentPoses = new Map();
+  for (const { id, avatar, color, x, y } of players) {
+    const pose = walkPose(avatar, poses.get(id), x, y, now);
+    currentPoses.set(id, pose);
+    drawAvatar(context, avatar, color, x, y, pose.direction, pose.phase);
+  }
+  poses = currentPoses;
   drawOverlays(players, labelSize, now);
   requestAnimationFrame(frame);
 }
