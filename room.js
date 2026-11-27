@@ -1,6 +1,6 @@
 import { decodeSignal, encodeSignal } from './signaling.js?v=4';
 import { backdrops, defaultAmbience, tracks } from './ambience.js';
-import { cleanAvatar } from './avatar.js?v=12';
+import { cleanAvatar } from './avatar.js?v=14';
 
 const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
 const playbackDelay = 110;

@@ -1,5 +1,5 @@
-import { avatarArtReady, avatarBounds, avatarOptions, avatarParts, avatarScale, cleanAvatar, drawAvatar } from './avatar.js?v=12';
-import { emptyAvatarLayout, loadAvatarLayout, placementKeys, placementLimits, validateAvatarLayout, visiblePartRect } from './avatar-layout.js?v=12';
+import { avatarArtReady, avatarBounds, avatarOptions, avatarParts, avatarScale, cleanAvatar, drawAvatar } from './avatar.js?v=14';
+import { emptyAvatarLayout, loadAvatarLayout, placementKeys, placementLimits, validateAvatarLayout, visiblePartRect } from './avatar-layout.js?v=14';
 
 const byId = id => document.getElementById(id);
 const canvas = byId('studio-canvas');
@@ -14,7 +14,7 @@ const fieldLabels = { x: 'X offset', y: 'Y offset', scaleX: 'Width %', scaleY: '
   clipLeft: 'Clip left %', clipRight: 'Clip right %', clipBottom: 'Clip bottom %' };
 const partLabels = { 'arm-far': 'Far arm', 'arm-near': 'Near arm', 'arm-left': 'Left arm', 'arm-right': 'Right arm',
   'leg-far': 'Far leg', 'leg-near': 'Near leg', 'leg-left': 'Left leg', 'leg-right': 'Right leg',
-  'hair-rear': 'Rear hair' };
+  'hair-rear': 'Rear hair', 'eyes-far': 'Far eye' };
 const inputs = new Map();
 const history = [];
 const avatar = readProfile();
@@ -194,6 +194,7 @@ function render(rebuildLayers = true) {
     if (input !== document.activeElement) input.value = String(Math.round(part.values[field] * 100) / 100);
   }
   byId('part-hidden').checked = part.hidden;
+  byId('part-flip').checked = part.flip;
   byId('reset-part').disabled = !Object.hasOwn(layout.parts, currentKey(part));
   const keys = placementKeys(part, avatar, direction);
   const narrower = scopeInput.value === 'angle' ? [keys.art, keys.body] : scopeInput.value === 'art' ? [keys.body] : [];
@@ -281,10 +282,12 @@ for (const button of angleButtons) button.addEventListener('click', () => {
 for (const button of document.querySelectorAll('[data-nudge]')) button.addEventListener('click', event => {
   nudge(...button.dataset.nudge.split(',').map(value => Number(value) * (event.shiftKey ? 2 : 0.25)));
 });
-byId('part-hidden').addEventListener('change', event => {
-  const part = currentPart();
-  if (part) updateRule(currentKey(part), { hidden: event.target.checked });
-});
+for (const [id, field] of [['part-hidden', 'hidden'], ['part-flip', 'flip']]) {
+  byId(id).addEventListener('change', event => {
+    const part = currentPart();
+    if (part) updateRule(currentKey(part), { [field]: event.target.checked });
+  });
+}
 byId('undo').addEventListener('click', undo);
 byId('send-back').addEventListener('click', () => shiftLayer(-1));
 byId('bring-forward').addEventListener('click', () => shiftLayer(1));

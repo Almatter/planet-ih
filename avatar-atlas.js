@@ -53,4 +53,13 @@ export const avatarTiles = {
   'mouth-quiet': [220, 652, 100, 18],
   'mouth-fang': [328, 652, 100, 47],
   'nose-broad': [436, 652, 100, 95],
+  'nose-front-button': [544, 652, 77, 75],
+  'nose-front-straight': [652, 652, 52, 96],
+  'nose-front-broad': [760, 652, 100, 74],
+  'nose-side-button': [4, 760, 74, 79],
+  'nose-side-straight': [112, 760, 68, 100],
+  'nose-side-broad': [220, 760, 89, 100],
+  'eye-far': [328, 760, 100, 87],
+  'eye-far-narrow': [436, 760, 100, 71],
+  'ear-round-side': [544, 760, 67, 100],
 };

@@ -12,6 +12,8 @@ The editor saves a draft in your browser. **Export layout** downloads `avatar-la
 
 For hair that straddles the face, unhide **Rear hair** to position a copy behind the head. Use the clip fields to trim the front **Hair** layer to the fringe you want to keep.
 
+**Flip horizontally** inverts a layer in the chosen view. For side views, **Side eyes** offers two open-eye looks or a near-eye-only look. The near eye and far eye can be aligned independently.
+
 ## Join a room
 
 1. On the game page, enter a display name and choose **Host room**, then **Create invite**.

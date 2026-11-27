@@ -1,5 +1,5 @@
-import { avatarTiles } from './avatar-atlas.js?v=9';
-import { adjustedPlacement, emptyAvatarLayout, visiblePartRect } from './avatar-layout.js?v=12';
+import { avatarTiles } from './avatar-atlas.js?v=14';
+import { adjustedPlacement, emptyAvatarLayout, visiblePartRect } from './avatar-layout.js?v=14';
 
 const accessoryColors = { Ivory: '#e5d5b6', Gold: '#dcaa66', Chestnut: '#ac7255', Ebony: '#594957',
   Rose: '#d68b91', Teal: '#62aa99', Violet: '#a884bd' };
@@ -20,6 +20,7 @@ export const avatarOptions = {
   wingColor: accessoryOptions,
   skin: ['Peach', 'Golden', 'Copper', 'Umber', 'Slate', 'Lavender'],
   eyes: ['Hazel', 'Blue', 'Green', 'Violet', 'Amber'],
+  sideEyes: ['Two eyes', 'Narrow far eye', 'Near eye only'],
   nose: ['Button', 'Straight', 'Broad'],
   mouth: ['Smile', 'Quiet', 'Fang'],
   lipColor: ['Natural', ...Object.keys(lipColors)],
@@ -30,7 +31,7 @@ export const avatarOptions = {
 export const defaultAvatar = {
   body: 'Medium', outfit: 'Traveler tunic', dye: 'Room color', ears: 'Round', earColor: 'Natural',
   horns: 'None', hornColor: 'Natural', tail: 'None', tailColor: 'Natural', wings: 'None', wingColor: 'Natural',
-  skin: 'Golden', eyes: 'Hazel', nose: 'Button', mouth: 'Smile', lipColor: 'Natural', hair: 'Cropped', hairColor: 'Chestnut',
+  skin: 'Golden', eyes: 'Hazel', sideEyes: 'Two eyes', nose: 'Button', mouth: 'Smile', lipColor: 'Natural', hair: 'Cropped', hairColor: 'Chestnut',
 };
 
 export function cleanAvatar(input) {
@@ -55,7 +56,7 @@ const outfitTiles = { 'Traveler tunic': 'tunic', 'Tea house apron': 'apron', 'Sc
 const hairTiles = { Cropped: 'cropped', 'Side fringe': 'fringe', Bob: 'bob', Braids: 'braids' };
 const layerOrders = { tail: 10, wings: 20, 'leg-left': 30, 'leg-far': 30, 'leg-right': 40, 'leg-near': 40,
   'arm-left': 50, 'arm-far': 50, 'arm-right': 60, neck: 70, outfit: 80, 'arm-near': 90, 'hair-rear': 97,
-  ears: 100, head: 110, eyes: 120, nose: 130, mouth: 140, hair: 150, horns: 170 };
+  ears: 100, head: 110, 'eyes-far': 119, eyes: 120, nose: 130, mouth: 140, hair: 150, horns: 170 };
 const atlas = typeof Image === 'function' ? new Image() : null;
 const tintedTiles = new Map();
 let publishedLayout = emptyAvatarLayout;
@@ -75,7 +76,7 @@ export const avatarArtReady = new Promise(resolve => {
   }
   atlas.onload = () => resolve(true);
   atlas.onerror = () => resolve(false);
-  atlas.src = new URL('./assets/avatar-atlas.png?v=9', import.meta.url).href;
+  atlas.src = new URL('./assets/avatar-atlas.png?v=14', import.meta.url).href;
 });
 
 export function avatarBounds(player) {
@@ -171,20 +172,31 @@ function drawTail(add, avatar, view, stride) {
 function drawFeatures(add, avatar, view, head, bob, skin) {
   const profile = view === 'side';
   const center = profile ? 1.9 : 0;
+  const twoEyes = profile && avatar.sideEyes !== 'Near eye only';
   const earTint = accessoryColors[avatar.earColor];
   if (avatar.ears !== 'Cat') {
-    const ears = profile && avatar.ears === 'Elf' ? 'ear-side' : avatar.ears === 'Elf' ? 'ears-elf' : 'ears-round';
-    const single = ears === 'ear-side';
-    add('ears', ears, single ? -head / 2 + 0.5 : 0, -25.3 - bob, single ? 5.1 : head + (avatar.ears === 'Elf' ? 5.2 : 3.5),
-      { tint: earTint ?? skin, height: avatar.ears === 'Elf' ? 6.4 : 5.35 });
+    const elf = avatar.ears === 'Elf';
+    const ears = profile ? (elf ? 'ear-side' : 'ear-round-side') : (elf ? 'ears-elf' : 'ears-round');
+    add('ears', ears, profile ? -head / 2 + (elf ? 0.5 : 1.1) : 0, -25.3 - bob,
+      profile ? (elf ? 5.1 : 3.15) : head + (elf ? 5.2 : 3.5),
+      { tint: earTint ?? skin, height: elf ? 6.4 : profile ? 4.85 : 5.35 });
   }
   add('head', `head-${view}`, 0, -31 - bob, head, { height: 12.8, tint: skin });
   if (view !== 'back') {
-    add('eyes', profile ? 'eye-side' : 'eyes-front', center, -25.1 - bob, profile ? 4.2 : head * 0.69,
-      { height: 3.05, tint: eyeColors[avatar.eyes], layer: 'eyes' });
-    const nose = avatar.nose === 'Broad' ? 'nose-broad' : 'nose';
-    add('nose', nose, center + (profile ? 1.65 : 0), -22.85 - bob, avatar.nose === 'Straight' ? 0.98 : 1.4,
-      { height: avatar.nose === 'Straight' ? 2.05 : 1.42, tint: skin });
+    const iris = eyeColors[avatar.eyes];
+    if (twoEyes) {
+      const narrow = avatar.sideEyes === 'Narrow far eye';
+      add('eyes-far', narrow ? 'eye-far-narrow' : 'eye-far', head * 0.397, -24.45 - bob, narrow ? 1.38 : 1.6,
+        { height: narrow ? 2.05 : 2.55, tint: iris, layer: 'eyes' });
+    }
+    add('eyes', profile ? 'eye-side' : 'eyes-front', center, -25.1 - bob,
+      profile ? (twoEyes ? 3.35 : 4.2) : head * 0.69, { height: 3.05, tint: iris, layer: 'eyes' });
+    const nose = `nose-${view}-${avatar.nose.toLowerCase()}`;
+    const noseSize = { Button: [1.26, 1.24], Straight: [1.02, 1.72], Broad: [1.65, 1.3] }[avatar.nose];
+    // Existing layouts identify Button and Straight as "nose" and Broad as "nose-broad".
+    const variant = avatar.nose === 'Broad' ? 'nose-broad' : 'nose';
+    add('nose', nose, center + (profile ? 1.41 : 0), -22.85 - bob, noseSize[0] + (profile ? 0.24 : 0),
+      { height: noseSize[1] + (profile ? 0.19 : 0), tint: skin, variant });
     const mouth = { Smile: 'mouth-smile', Quiet: 'mouth-quiet', Fang: 'mouth-fang' }[avatar.mouth];
     add('mouth', mouth, center + (profile ? 0.75 : 0), -20.95 - bob, profile ? 2.45 : 3.35,
       { tint: lipColors[avatar.lipColor], layer: 'lips' });
@@ -220,7 +232,7 @@ export function avatarParts(avatar, color, direction = 'south', phase = 0, layou
   const add = (id, name, x, y, width, options = {}) => {
     const crop = avatarTiles[name];
     const height = options.height ?? width * crop[3] / crop[2];
-    const variant = id.startsWith('arm-') || id === 'neck' ? `${view}:${outfitTiles[avatar.outfit]}` : id.startsWith('leg-') ? view : name;
+    const variant = options.variant ?? (id.startsWith('arm-') || id === 'neck' ? `${view}:${outfitTiles[avatar.outfit]}` : id.startsWith('leg-') ? view : name);
     const order = view === 'back' && id === 'tail' ? 92 : view === 'back' && id === 'wings' ? 96 :
       name === 'ears-cat' ? 160 : layerOrders[id];
     const part = { ...options, id, name, variant, x, y, width, height, order };

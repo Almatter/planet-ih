@@ -16,7 +16,7 @@ export function validateAvatarLayout(input) {
         !rule || typeof rule !== 'object' || Array.isArray(rule)) throw new Error('The layout contains an invalid part key.');
     const valid = {};
     for (const [field, value] of Object.entries(rule)) {
-      if (field === 'hidden' && typeof value === 'boolean') valid[field] = value;
+      if ((field === 'hidden' || field === 'flip') && typeof value === 'boolean') valid[field] = value;
       else if (Object.hasOwn(placementLimits, field) && Number.isFinite(value)) {
         const [minimum, maximum] = placementLimits[field];
         if (value < minimum || value > maximum) throw new Error(`The ${field} value is outside its supported range.`);
@@ -44,14 +44,14 @@ export function adjustedPlacement(part, avatar, direction, layout) {
   const keys = placementKeys(part, avatar, direction);
   const values = { x: 0, y: 0, scaleX: 100, scaleY: 100, rotation: 0, order: part.order,
     opacity: 100, clip: (part.visibleFrom ?? 0) * 100, clipLeft: 0, clipRight: 0, clipBottom: 0,
-    hidden: part.hidden ?? false,
+    hidden: part.hidden ?? false, flip: part.flip ?? false,
     ...layout.parts[keys.angle], ...layout.parts[keys.art], ...layout.parts[keys.body] };
   const mirror = direction === 'west' ? -1 : 1;
   return {
     ...part, values, x: part.x + values.x * mirror, y: part.y + values.y,
     width: part.width * values.scaleX / 100, height: part.height * values.scaleY / 100,
     angle: (part.angle ?? 0) + values.rotation * Math.PI / 180 * mirror,
-    order: values.order, opacity: values.opacity / 100, visibleFrom: values.clip / 100, hidden: values.hidden,
+    order: values.order, opacity: values.opacity / 100, visibleFrom: values.clip / 100, hidden: values.hidden, flip: values.flip,
     cropLeft: (mirror < 0 ? values.clipRight : values.clipLeft) / 100,
     cropRight: (mirror < 0 ? values.clipLeft : values.clipRight) / 100,
     cropBottom: values.clipBottom / 100,

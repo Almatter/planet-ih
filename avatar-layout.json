@@ -1,4 +1,79 @@
 {
   "version": 1,
-  "parts": {}
+  "parts": {
+    "east/ears/ear-side": {
+      "order": 151,
+      "x": 5,
+      "y": -2.25
+    },
+    "east/eyes/eye-side": {
+      "x": 0,
+      "y": 0.75
+    },
+    "east/hair/braids-side": {
+      "x": 1.5,
+      "y": 0.5,
+      "scaleX": 120
+    },
+    "east/head/head-side": {
+      "x": 0,
+      "y": 1
+    },
+    "east/mouth/mouth-quiet": {
+      "x": 0,
+      "y": 1.75
+    },
+    "east/nose/nose": {
+      "x": 0,
+      "y": 1
+    },
+    "south/eyes/eyes-front": {
+      "x": 0,
+      "y": 1.25
+    },
+    "south/hair/braids-front": {
+      "x": 0,
+      "y": 1.25,
+      "hidden": false
+    },
+    "south/head/head-front": {
+      "x": 0,
+      "y": 1.75
+    },
+    "south/mouth/mouth-quiet": {
+      "x": 0,
+      "y": 1.75
+    },
+    "south/nose/nose": {
+      "x": 0,
+      "y": 1
+    },
+    "west/ears/ear-side": {
+      "x": -4,
+      "y": -1.5,
+      "rotation": 9,
+      "order": 151
+    },
+    "west/eyes/eye-side": {
+      "x": 0.75,
+      "y": 0.75
+    },
+    "west/hair/braids-side": {
+      "x": -1,
+      "y": 1.5,
+      "scaleX": 120
+    },
+    "west/head/head-side": {
+      "x": 0,
+      "y": 1
+    },
+    "west/mouth/mouth-quiet": {
+      "x": -0.75,
+      "y": 1.5
+    },
+    "west/nose/nose": {
+      "x": 0,
+      "y": 0.75
+    }
+  }
 }

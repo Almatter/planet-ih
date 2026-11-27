@@ -1,6 +1,6 @@
-import { Room, capacity, chatLimit, maxMuteSeconds, cleanName, colors, width, height, position } from './room.js?v=12';
-import { avatarArtReady, avatarBounds, avatarOptions, cleanAvatar, drawAvatar, setPublishedAvatarLayout, walkPose } from './avatar.js?v=12';
-import { loadAvatarLayout } from './avatar-layout.js?v=12';
+import { Room, capacity, chatLimit, maxMuteSeconds, cleanName, colors, width, height, position } from './room.js?v=14';
+import { avatarArtReady, avatarBounds, avatarOptions, cleanAvatar, drawAvatar, setPublishedAvatarLayout, walkPose } from './avatar.js?v=14';
+import { loadAvatarLayout } from './avatar-layout.js?v=14';
 import { backdrops, defaultAmbience, tracks } from './ambience.js';
 import { RoomAudio } from './room-audio.js';
 
