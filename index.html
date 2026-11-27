@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#1c1713">
   <meta name="description" content="Meet friends in the Isekai Hell tea house.">
   <title>Planet IH</title>
-  <link rel="stylesheet" href="./style.css?v=5">
-  <script type="module" src="./game.js?v=5"></script>
+  <link rel="stylesheet" href="./style.css?v=6">
+  <script type="module" src="./game.js?v=6"></script>
 </head>
 <body>
   <main>
@@ -56,7 +56,13 @@
         <button id="leave" class="wide" hidden>Leave room</button>
       </section>
       <section class="play" aria-labelledby="field-title">
-        <div class="bar"><h2 id="field-title">Isekai Hell Tea House</h2><span id="count">1 player</span></div>
+        <div class="bar field-bar">
+          <h2 id="field-title">Isekai Hell Tea House</h2>
+          <div class="field-options">
+            <span id="count">1 player</span>
+            <label class="name-toggle"><input id="hide-names" type="checkbox"> Hide names</label>
+          </div>
+        </div>
         <canvas id="field" width="720" height="500" aria-label="Tea house with named player blocks. Click or tap the floor to move. Keyboard movement is available with WASD or arrow keys."></canvas>
         <section class="chat" aria-labelledby="chat-title">
           <div class="bar chat-heading"><h2 id="chat-title">Room chat</h2><span id="chat-count">0 / 100</span></div>

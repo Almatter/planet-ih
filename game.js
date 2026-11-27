@@ -5,6 +5,7 @@ const canvas = byId('field');
 const context = canvas.getContext('2d');
 const nameInput = byId('name');
 const status = byId('status');
+const hideNames = byId('hide-names');
 const messageInput = byId('message');
 const chatHistory = byId('chat-history');
 const chatLog = byId('chat-log');
@@ -15,6 +16,19 @@ let mode = 'solo';
 let room;
 let inviteId;
 let destination;
+
+try {
+  hideNames.checked = localStorage.getItem('planet-ih-hide-names') === 'true';
+} catch {
+  // The checkbox still works if browser storage is disabled.
+}
+hideNames.addEventListener('change', () => {
+  try {
+    localStorage.setItem('planet-ih-hide-names', String(hideNames.checked));
+  } catch {
+    // Keep the setting for this page even when it cannot be saved.
+  }
+});
 
 function setStatus(message) {
   status.textContent = message;
@@ -363,20 +377,22 @@ function wrapMessage(text, maxWidth) {
   return lines;
 }
 
-function drawLabels(players, fontSize, now) {
+function drawOverlays(players, fontSize, now) {
   const occupied = players.map(({ x, y }) => ({ left: x - 16, top: y - 16, right: x + 17, bottom: y + 19 }));
   const labelHeight = fontSize + 7;
   context.font = `bold ${fontSize}px system-ui, sans-serif`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  for (const { x, y, name } of players) {
-    const labelWidth = context.measureText(name).width + 16;
-    const box = placeLabel(x, y, labelWidth, labelHeight, occupied, players.length * 2);
-    if (!box) continue;
-    context.fillStyle = '#2b1c14';
-    context.fillRect(box.left, box.top, labelWidth, labelHeight);
-    context.fillStyle = '#fff1db';
-    context.fillText(name, box.centerX, box.top + labelHeight / 2);
+  if (!hideNames.checked) {
+    for (const { x, y, name } of players) {
+      const labelWidth = context.measureText(name).width + 16;
+      const box = placeLabel(x, y, labelWidth, labelHeight, occupied, players.length * 2);
+      if (!box) continue;
+      context.fillStyle = '#2b1c14';
+      context.fillRect(box.left, box.top, labelWidth, labelHeight);
+      context.fillStyle = '#fff1db';
+      context.fillText(name, box.centerX, box.top + labelHeight / 2);
+    }
   }
 
   context.font = `${fontSize}px system-ui, sans-serif`;
@@ -435,7 +451,7 @@ function frame(now) {
   context.clearRect(0, 0, width, height);
   const players = room.displayPlayers(now).sort((a, b) => a.y - b.y);
   for (const player of players) drawPlayer(player);
-  drawLabels(players, labelSize, now);
+  drawOverlays(players, labelSize, now);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
