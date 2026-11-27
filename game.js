@@ -1,16 +1,20 @@
-import { Room, capacity, cleanName, colors, width, height, position } from './room.js?v=4';
+import { Room, capacity, chatLimit, cleanName, colors, width, height, position } from './room.js?v=5';
 
 const byId = id => document.getElementById(id);
 const canvas = byId('field');
 const context = canvas.getContext('2d');
 const nameInput = byId('name');
 const status = byId('status');
+const messageInput = byId('message');
+const chatHistory = byId('chat-history');
+const chatLog = byId('chat-log');
 const keys = new Set();
-const pointerDirections = new Map();
+const bubbles = new Map();
 const directions = { w: 'up', a: 'left', s: 'down', d: 'right', arrowup: 'up', arrowleft: 'left', arrowdown: 'down', arrowright: 'right' };
 let mode = 'solo';
 let room;
 let inviteId;
+let destination;
 
 function setStatus(message) {
   status.textContent = message;
@@ -25,6 +29,17 @@ function renderRoster() {
     swatch.className = 'swatch';
     swatch.style.backgroundColor = player.color;
     item.append(swatch, player.name + (player === room.local ? ' (you)' : ''));
+    if (mode === 'host' && player !== room.local) {
+      const kick = document.createElement('button');
+      kick.className = 'kick';
+      kick.textContent = 'Kick';
+      kick.setAttribute('aria-label', `Kick ${player.name}`);
+      kick.addEventListener('click', () => {
+        room.kick(player.id);
+        setStatus(`${player.name} was removed from the room.`);
+      });
+      item.append(kick);
+    }
     return item;
   }));
 }
@@ -37,8 +52,54 @@ function setMode(next) {
   byId('joining').hidden = mode !== 'join';
   byId('leave').hidden = mode === 'solo';
   byId('leave').textContent = mode === 'host' ? 'Close room' : mode === 'join' ? 'Cancel join' : 'Leave room';
+  byId('room-name').hidden = mode === 'guest';
   nameInput.disabled = mode === 'join' && (byId('reply').disabled || !byId('answer').hidden) || mode === 'guest';
+  const canChat = mode === 'host' || mode === 'guest';
+  messageInput.disabled = !canChat;
+  messageInput.placeholder = canChat ? 'Write a message' : 'Host or join to chat';
+  byId('send-chat').disabled = !canChat;
 }
+
+function showChat(entries, silent) {
+  const follow = chatHistory.scrollHeight - chatHistory.scrollTop - chatHistory.clientHeight < 28 ||
+    (!silent && entries.some(entry => entry.playerId === room.local.id));
+  const added = document.createDocumentFragment();
+  for (const { playerId, name, text, color } of entries) {
+    const row = document.createElement('li');
+    const author = document.createElement('strong');
+    author.textContent = name;
+    author.style.color = color;
+    row.append(author, ' ', text);
+    added.append(row);
+    if (!silent) bubbles.set(playerId, { text, expires: performance.now() + 5000 + Array.from(text).length * 45 });
+  }
+  byId('chat-empty').hidden = true;
+  chatLog.append(added);
+  if (follow) chatHistory.scrollTop = chatHistory.scrollHeight;
+}
+
+function updateMessageCount() {
+  const characters = Array.from(messageInput.value);
+  if (characters.length > chatLimit) messageInput.value = characters.slice(0, chatLimit).join('');
+  byId('chat-count').textContent = `${Math.min(characters.length, chatLimit)} / ${chatLimit}`;
+}
+
+messageInput.addEventListener('input', event => {
+  if (!event.isComposing) updateMessageCount();
+});
+messageInput.addEventListener('compositionend', updateMessageCount);
+byId('chat-form').addEventListener('submit', event => {
+  event.preventDefault();
+  if (messageInput.disabled || !messageInput.value.trim()) return;
+  const sent = room.say(messageInput.value);
+  const chatStatus = byId('chat-status');
+  chatStatus.hidden = sent;
+  chatStatus.textContent = sent ? '' : 'The connection is busy. Try sending again.';
+  if (sent) {
+    messageInput.value = '';
+    updateMessageCount();
+  }
+});
 
 function clearInvite() {
   inviteId = undefined;
@@ -54,6 +115,13 @@ function clearInvite() {
 
 function reset(message) {
   room?.close();
+  destination = undefined;
+  bubbles.clear();
+  chatLog.replaceChildren();
+  byId('chat-empty').hidden = false;
+  byId('chat-status').hidden = true;
+  messageInput.value = '';
+  updateMessageCount();
   const local = { id: 'local', name: cleanName(nameInput.value) || 'Traveler', color: colors[0], x: width / 2, y: height / 2 };
   room = new Room(local, joined => {
     if (joined && mode === 'join') {
@@ -64,15 +132,16 @@ function reset(message) {
       setStatus('Guest connected. Create another invite to add a friend.');
     }
     renderRoster();
-  }, (lostHost, id, wasPlaying) => {
+  }, (lostHost, id, wasPlaying, reason) => {
     if (lostHost) {
-      reset(wasPlaying ? 'The connection to the host ended.' : 'The browser could not connect to the host. Return to the game and ask for a fresh invite.');
+      if (reason === 'kicked') reset('The host removed you from the room.');
+      else reset(wasPlaying ? 'The connection to the host ended.' : 'The browser could not connect to the host. Return to the game and ask for a fresh invite.');
       return;
     }
     if (id === inviteId) clearInvite();
     setStatus(wasPlaying ? 'A guest left the room.' : 'The browser could not connect. Ask your guest to return to the game, then create a fresh invite.');
     renderRoster();
-  });
+  }, showChat);
   clearInvite();
   byId('offer-in').value = '';
   byId('offer-in').readOnly = false;
@@ -211,69 +280,33 @@ addEventListener('keydown', event => {
   if (!Object.hasOwn(directions, key) || event.target.closest('input, textarea, [contenteditable]') || event.metaKey || event.ctrlKey || event.altKey) return;
   event.preventDefault();
   keys.add(key);
+  destination = undefined;
 });
 addEventListener('keyup', event => keys.delete(event.key.toLowerCase()));
-for (const button of document.querySelectorAll('[data-move]')) {
-  button.addEventListener('pointerdown', event => {
-    if (event.button !== 0) return;
-    event.preventDefault();
-    button.setPointerCapture(event.pointerId);
-    pointerDirections.set(event.pointerId, button.dataset.move);
-    button.toggleAttribute('data-held', true);
-  });
-  const release = event => {
-    pointerDirections.delete(event.pointerId);
-    button.toggleAttribute('data-held', [...pointerDirections.values()].includes(button.dataset.move));
-  };
-  for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) button.addEventListener(event, release);
-  button.addEventListener('click', event => {
-    if (!event.detail) move(new Set([button.dataset.move]), 0.1);
-  });
-}
-addEventListener('blur', () => {
-  keys.clear();
-  pointerDirections.clear();
-  document.querySelectorAll('[data-held]').forEach(button => button.removeAttribute('data-held'));
+canvas.addEventListener('click', event => {
+  const bounds = canvas.getBoundingClientRect();
+  destination = position((event.clientX - bounds.left) * width / bounds.width, (event.clientY - bounds.top) * height / bounds.height);
 });
+addEventListener('blur', () => keys.clear());
 addEventListener('pagehide', () => room.close());
 addEventListener('pageshow', event => {
   if (event.persisted) reset('Play solo or invite friends to share the field.');
 });
 
 function move(active, seconds) {
-  const dx = Number(active.has('right')) - Number(active.has('left'));
-  const dy = Number(active.has('down')) - Number(active.has('up'));
-  if (!dx && !dy) return;
-  const distance = 185 * seconds / Math.hypot(dx, dy);
   const { x, y } = room.local;
+  const dx = destination ? destination.x - x : Number(active.has('right')) - Number(active.has('left'));
+  const dy = destination ? destination.y - y : Number(active.has('down')) - Number(active.has('up'));
+  const length = Math.hypot(dx, dy);
+  const step = 185 * seconds;
+  if (destination && length <= step) {
+    Object.assign(room.local, destination);
+    destination = undefined;
+    return;
+  }
+  if (!dx && !dy) return;
+  const distance = step / length;
   Object.assign(room.local, position(x + dx * distance, y + dy * distance));
-}
-
-function makeField() {
-  const field = document.createElement('canvas');
-  field.width = width;
-  field.height = height;
-  const ground = field.getContext('2d');
-  ground.fillStyle = '#203930';
-  ground.fillRect(0, 0, width, height);
-  for (let y = 0; y < height; y += 40) {
-    for (let x = 0; x < width; x += 40) {
-      ground.fillStyle = (x + y) % 80 === 0 ? '#27453a' : '#29483c';
-      ground.fillRect(x + 1, y + 1, 39, 39);
-    }
-  }
-  ground.fillStyle = '#365b47';
-  for (let index = 1; index < 105; index++) {
-    const x = (index * 397) % (width - 20) + 8;
-    const y = (index * index * 79) % (height - 20) + 8;
-    ground.fillRect(x, y, 2, 6);
-    ground.fillRect(x + 4, y - 3, 2, 8);
-    ground.fillRect(x + 8, y + 1, 2, 5);
-  }
-  ground.strokeStyle = '#52735b';
-  ground.lineWidth = 2;
-  ground.strokeRect(8, 8, width - 16, height - 16);
-  return field;
 }
 
 function drawPlayer(player) {
@@ -286,29 +319,97 @@ function drawPlayer(player) {
   context.fillRect(x - 14, y - 14, 28, 4);
 }
 
-function drawLabels(players, fontSize) {
-  const occupied = players.map(({ x, y }) => ({ left: x - 15, top: y - 15, right: x + 15, bottom: y + 18 }));
+function placeLabel(x, y, labelWidth, labelHeight, occupied, rows, spacing = labelHeight + 4) {
+  const centerX = Math.max(labelWidth / 2 + 5, Math.min(width - labelWidth / 2 - 5, x));
+  const left = centerX - labelWidth / 2;
+  const right = left + labelWidth;
+  for (let row = 0; row < rows; row++) {
+    const offset = Math.floor(row / 2) * spacing;
+    const top = row % 2 === 0 ? y - 20 - labelHeight - offset : y + 22 + offset;
+    const bottom = top + labelHeight;
+    if (top < 5 || bottom > height - 5 || occupied.some(box => left < box.right && right > box.left && top < box.bottom && bottom > box.top)) continue;
+    const box = { left, right, top, bottom, centerX };
+    occupied.push(box);
+    return box;
+  }
+}
+
+function wrapMessage(text, maxWidth) {
+  const lines = [];
+  let line = '';
+  for (const word of text.split(/\s+/)) {
+    const next = line ? `${line} ${word}` : word;
+    if (context.measureText(next).width <= maxWidth) {
+      line = next;
+      continue;
+    }
+    if (line) lines.push(line);
+    line = '';
+    for (const char of word) {
+      if (line && context.measureText(line + char).width > maxWidth) {
+        lines.push(line);
+        line = '';
+      }
+      line += char;
+    }
+  }
+  if (line) lines.push(line);
+  if (lines.length > 4) {
+    lines.length = 4;
+    const last = Array.from(lines[3]);
+    while (last.length && context.measureText(last.join('') + '…').width > maxWidth) last.pop();
+    lines[3] = last.join('').trimEnd() + '…';
+  }
+  return lines;
+}
+
+function drawLabels(players, fontSize, now) {
+  const occupied = players.map(({ x, y }) => ({ left: x - 16, top: y - 16, right: x + 17, bottom: y + 19 }));
   const labelHeight = fontSize + 7;
   context.font = `bold ${fontSize}px system-ui, sans-serif`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   for (const { x, y, name } of players) {
     const labelWidth = context.measureText(name).width + 16;
-    const centerX = Math.max(labelWidth / 2 + 4, Math.min(width - labelWidth / 2 - 4, x));
-    const left = centerX - labelWidth / 2;
-    const right = left + labelWidth;
-    for (let row = 0; row < players.length * 2; row++) {
-      const offset = Math.floor(row / 2) * (labelHeight + 3);
-      const top = row % 2 === 0 ? y - 18 - labelHeight - offset : y + 21 + offset;
-      const bottom = top + labelHeight;
-      if (top < 4 || bottom > height - 4 || occupied.some(box => left < box.right && right > box.left && top < box.bottom && bottom > box.top)) continue;
-      occupied.push({ left, right, top, bottom });
-      context.fillStyle = '#10221e';
-      context.fillRect(left, top, labelWidth, labelHeight);
-      context.fillStyle = '#f4f8f3';
-      context.fillText(name, centerX, top + labelHeight / 2);
-      break;
+    const box = placeLabel(x, y, labelWidth, labelHeight, occupied, players.length * 2);
+    if (!box) continue;
+    context.fillStyle = '#2b1c14';
+    context.fillRect(box.left, box.top, labelWidth, labelHeight);
+    context.fillStyle = '#fff1db';
+    context.fillText(name, box.centerX, box.top + labelHeight / 2);
+  }
+
+  context.font = `${fontSize}px system-ui, sans-serif`;
+  const lineHeight = fontSize + 6;
+  for (const [id, bubble] of bubbles) {
+    if (bubble.expires <= now) {
+      bubbles.delete(id);
+      continue;
     }
+    const player = players.find(entry => entry.id === id);
+    if (!player) continue;
+    if (bubble.fontSize !== fontSize) {
+      bubble.fontSize = fontSize;
+      bubble.lines = wrapMessage(bubble.text, 340);
+      bubble.width = Math.max(...bubble.lines.map(line => context.measureText(line).width)) + 28;
+    }
+    const bubbleHeight = bubble.lines.length * lineHeight + 15;
+    const box = placeLabel(player.x, player.y, bubble.width, bubbleHeight, occupied, 48, 12);
+    if (!box) continue;
+    const above = box.bottom < player.y;
+    const edge = above ? box.bottom : box.top;
+    const tailX = Math.max(box.left + 15, Math.min(box.right - 15, player.x));
+    context.fillStyle = '#fff1d9';
+    context.beginPath();
+    context.roundRect(box.left, box.top, bubble.width, bubbleHeight, 8);
+    context.fill();
+    context.beginPath();
+    context.moveTo(tailX - 7, edge);
+    context.lineTo(tailX, edge + (above ? 8 : -8));
+    context.lineTo(tailX + 7, edge);
+    context.fill();
+    context.fillStyle = '#261810';
+    bubble.lines.forEach((line, index) => context.fillText(line, box.centerX, box.top + 7 + (index + 0.5) * lineHeight));
   }
 }
 
@@ -323,19 +424,18 @@ function openInviteFromUrl() {
 }
 openInviteFromUrl();
 addEventListener('hashchange', openInviteFromUrl);
-const field = makeField();
 let labelSize = 19;
 new ResizeObserver(([entry]) => {
   labelSize = Math.max(19, Math.min(32, Math.round(13 * width / entry.contentRect.width)));
 }).observe(canvas);
 let lastFrame = performance.now();
 function frame(now) {
-  move(new Set([...Array.from(keys, key => directions[key]), ...pointerDirections.values()]), Math.min(0.05, Math.max(0, (now - lastFrame) / 1000)));
+  move(new Set(Array.from(keys, key => directions[key])), Math.min(0.05, Math.max(0, (now - lastFrame) / 1000)));
   lastFrame = now;
-  context.drawImage(field, 0, 0);
+  context.clearRect(0, 0, width, height);
   const players = room.displayPlayers(now).sort((a, b) => a.y - b.y);
   for (const player of players) drawPlayer(player);
-  drawLabels(players, labelSize);
+  drawLabels(players, labelSize, now);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

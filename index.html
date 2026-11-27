@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#10221e">
-  <meta name="description" content="A small browser-to-browser multiplayer playground.">
+  <meta name="theme-color" content="#1c1713">
+  <meta name="description" content="Meet friends in the Isekai Hell tea house.">
   <title>Planet IH</title>
-  <link rel="stylesheet" href="./style.css?v=3">
-  <script type="module" src="./game.js?v=4"></script>
+  <link rel="stylesheet" href="./style.css?v=5">
+  <script type="module" src="./game.js?v=5"></script>
 </head>
 <body>
   <main>
@@ -19,8 +19,10 @@
       <section class="panel room-panel" aria-labelledby="room-title">
         <h2 id="room-title">Room</h2>
         <p id="status" role="status">Play solo or invite friends to share the field.</p>
-        <label for="name">Display name</label>
-        <input id="name" maxlength="18" autocomplete="off" placeholder="Traveler">
+        <div id="room-name">
+          <label for="name">Display name</label>
+          <input id="name" maxlength="18" autocomplete="off" placeholder="Traveler">
+        </div>
         <div id="choices" class="actions">
           <button id="host" class="primary">Host room</button>
           <button id="join">Join room</button>
@@ -54,18 +56,20 @@
         <button id="leave" class="wide" hidden>Leave room</button>
       </section>
       <section class="play" aria-labelledby="field-title">
-        <div class="bar"><h2 id="field-title">The Field</h2><span id="count">1 player</span></div>
-        <canvas id="field" width="720" height="500" aria-label="Playfield with named player blocks. Move with WASD, arrow keys, or the direction buttons."></canvas>
-        <div class="controls">
-          <p class="keyboard-tip">Move with <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> or arrow keys.</p>
-          <p class="touch-tip">Hold a direction to move.</p>
-          <div class="pad" role="group" aria-label="Touch movement">
-            <button data-move="up" aria-label="Move up">▲</button>
-            <button data-move="left" aria-label="Move left">◀</button>
-            <button data-move="down" aria-label="Move down">▼</button>
-            <button data-move="right" aria-label="Move right">▶</button>
+        <div class="bar"><h2 id="field-title">Isekai Hell Tea House</h2><span id="count">1 player</span></div>
+        <canvas id="field" width="720" height="500" aria-label="Tea house with named player blocks. Click or tap the floor to move. Keyboard movement is available with WASD or arrow keys."></canvas>
+        <section class="chat" aria-labelledby="chat-title">
+          <div class="bar chat-heading"><h2 id="chat-title">Room chat</h2><span id="chat-count">0 / 100</span></div>
+          <div id="chat-history" role="log" aria-labelledby="chat-title" tabindex="0">
+            <p id="chat-empty">No messages yet.</p>
+            <ol id="chat-log"></ol>
           </div>
-        </div>
+          <form id="chat-form">
+            <input id="message" aria-label="Chat message" aria-describedby="chat-count" autocomplete="off" placeholder="Host or join to chat" disabled>
+            <button id="send-chat" class="primary" disabled>Send</button>
+          </form>
+          <p id="chat-status" role="status" hidden></p>
+        </section>
       </section>
       <section class="panel roster-panel" aria-labelledby="players-title">
         <h2 id="players-title">Players</h2>

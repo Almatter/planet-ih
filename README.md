@@ -1,6 +1,6 @@
 # Planet IH
 
-Planet IH is a browser multiplayer prototype for [Isekai Hell](https://github.com/Almatter/IsekaiHell). Up to eight players can meet on a shared 2D field. Each player gets a distinct name and block color. Use WASD, the arrow keys, or the on-screen direction pad to move.
+Planet IH is a browser multiplayer prototype for [Isekai Hell](https://github.com/Almatter/IsekaiHell). Up to eight players can meet in a medieval fantasy tea house. Each player gets a distinct name and block color. Click or tap the floor to move. WASD and arrow keys also work.
 
 ## Join a room
 
@@ -10,6 +10,8 @@ Planet IH is a browser multiplayer prototype for [Isekai Hell](https://github.co
 4. Create a fresh invite for each additional friend. Keep the host tab open for the life of the room. On a phone, the join controls appear above the field. Open the invite in Safari or Chrome and return to the game after sending the reply. Planet IH has no countdown for swapping codes, though mobile browsers can still suspend or discard a tab left in the background.
 
 For Discord, use **Copy Discord invite** to paste a clickable **Join Planet IH** link with the code hidden in the URL. **Copy Discord reply** formats the reply as a code block. The host can paste the code by itself or copy and paste the whole Discord message.
+
+Room chat allows up to 100 characters per message. New messages appear in speech bubbles beside players for a few seconds. Room history is kept in the host's browser, appears for later arrivals, and clears when the room closes. The host can use **Kick** next to a player to remove them while the room stays open.
 
 ## Run locally
 

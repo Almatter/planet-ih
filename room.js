@@ -7,7 +7,9 @@ export const colors = ['#baf592', '#ffc375', '#74ddf6', '#f995bd', '#c7afff', '#
 export const capacity = colors.length;
 export const width = 720;
 export const height = 500;
-export const margin = 23;
+export const chatLimit = 100;
+const chatBatchSize = 12;
+const floor = { left: 140, right: 580, top: 140, bottom: 427 };
 
 export function cleanName(value) {
   return typeof value === 'string' ? Array.from(value.replace(/[\p{Cc}\p{Cf}]/gu, '').trim()).slice(0, 18).join('') : '';
@@ -15,9 +17,13 @@ export function cleanName(value) {
 
 export function position(x, y) {
   return {
-    x: Math.max(margin, Math.min(width - margin, x)),
-    y: Math.max(margin, Math.min(height - margin, y)),
+    x: Math.max(floor.left, Math.min(floor.right, x)),
+    y: Math.max(floor.top, Math.min(floor.bottom, y)),
   };
+}
+
+function chatText(value) {
+  return typeof value === 'string' ? Array.from(value.replace(/\p{Cc}/gu, ' ').trim()).slice(0, chatLimit).join('') : '';
 }
 
 function gather(connection) {
@@ -50,7 +56,9 @@ function localSignal(connection) {
 }
 
 function send(channel, packet) {
-  if (channel?.readyState === 'open' && channel.bufferedAmount < 8192) channel.send(packet);
+  if (channel?.readyState !== 'open' || channel.bufferedAmount >= 8192) return false;
+  channel.send(packet);
+  return true;
 }
 
 function readPacket(raw) {
@@ -63,13 +71,15 @@ function validPosition(player) {
 }
 
 export class Room {
-  constructor(local, onChange, onDrop) {
+  constructor(local, onChange, onDrop, onChat) {
     this.local = local;
     this.onChange = onChange;
     this.onDrop = onDrop;
+    this.onChat = onChat;
     this.players = new Map([[local.id, local]]);
     this.guests = new Map();
     this.positionSamples = new Map();
+    this.chat = [];
     this.closed = false;
   }
 
@@ -174,8 +184,11 @@ export class Room {
         name = `${Array.from(base).slice(0, 15).join('')} ${number}`;
       }
       const color = colors.find(candidate => roster.every(entry => entry.color !== candidate));
-      const guest = { id: peer.id, name, color, x: width / 2 + 34 * roster.length, y: height / 2 + 45 };
+      const spawn = position(width / 2 + (roster.length % 4 - 1.5) * 70, height / 2 + 53 + 58 * Math.floor(roster.length / 4));
+      const guest = { id: peer.id, name, color, ...spawn };
       this.players.set(peer.id, guest);
+      peer.chatCursor = 0;
+      peer.historyEnd = this.chat.length;
       this.recordPosition(guest, performance.now());
       this.onChange(true);
       this.tick();
@@ -184,10 +197,29 @@ export class Room {
       Object.assign(player, position(packet.x, packet.y));
       this.recordPosition(player, performance.now());
     }
+    if (packet?.type === 'say' && player) this.addChat(player, chatText(packet.text));
   }
 
   receiveHost(peer, packet) {
-    if (this.host !== peer || packet?.type !== 'state' || !Array.isArray(packet.players) || packet.players.length > capacity) return;
+    if (this.host !== peer) return;
+    if (packet?.type === 'kicked') {
+      this.drop(peer, true, 'kicked');
+      return;
+    }
+    if (packet?.type === 'chat') {
+      if (this.local.id !== peer.id || packet.start !== this.chat.length || !Array.isArray(packet.entries) || packet.entries.length > chatBatchSize) return;
+      const entries = [];
+      for (const entry of packet.entries) {
+        const text = chatText(entry?.text);
+        const name = cleanName(entry?.name);
+        if (!text || !name || typeof entry.playerId !== 'string' || !colors.includes(entry.color)) return;
+        entries.push({ playerId: entry.playerId, name, text, color: entry.color });
+      }
+      this.chat.push(...entries);
+      this.onChat(entries, packet.silent);
+      return;
+    }
+    if (packet?.type !== 'state' || !Array.isArray(packet.players) || packet.players.length > capacity) return;
     const roster = new Map();
     for (const player of packet.players) {
       if (!validPosition(player) || typeof player.id !== 'string' || !colors.includes(player.color) || !cleanName(player.name)) return;
@@ -210,6 +242,22 @@ export class Room {
     if (first || rosterChanged) this.onChange(first);
   }
 
+  say(value) {
+    const text = chatText(value);
+    if (!text) return false;
+    if (this.host) return send(this.host.channel, JSON.stringify({ type: 'say', text }));
+    this.addChat(this.local, text);
+    return true;
+  }
+
+  addChat(player, text) {
+    if (!text) return;
+    const entry = { playerId: player.id, name: player.name, color: player.color, text };
+    this.chat.push(entry);
+    this.onChat([entry], false);
+    this.tick();
+  }
+
   tick() {
     if (this.host && this.local.id === this.host.id) {
       const { x, y } = this.local;
@@ -218,19 +266,36 @@ export class Room {
     if (this.guests.size) {
       const state = JSON.stringify({ type: 'state', players: [...this.players.values()] });
       for (const peer of this.guests.values()) {
-        if (this.players.has(peer.id)) send(peer.channel, state);
+        if (!this.players.has(peer.id) || !send(peer.channel, state)) continue;
+        const start = peer.chatCursor;
+        if (start >= this.chat.length) continue;
+        const silent = start < peer.historyEnd;
+        const end = Math.min(start + chatBatchSize, silent ? peer.historyEnd : this.chat.length);
+        const entries = this.chat.slice(start, end);
+        if (send(peer.channel, JSON.stringify({ type: 'chat', start, entries, silent }))) peer.chatCursor = end;
       }
     }
   }
 
-  drop(peer, notify = false) {
+  kick(id) {
+    const peer = this.guests.get(id);
+    if (!peer || !this.players.has(id)) return;
+    if (peer.channel.readyState === 'open') peer.channel.send(JSON.stringify({ type: 'kicked' }));
+    this.drop(peer, false, 'kicked');
+    this.onChange(false);
+    this.tick();
+  }
+
+  drop(peer, notify = false, reason) {
     const wasHost = this.host === peer;
     if (wasHost) this.host = null;
     else if (!this.guests.delete(peer.id)) return;
     const wasPlaying = wasHost ? this.local.id === peer.id : this.players.delete(peer.id);
     this.positionSamples.delete(peer.id);
-    peer.connection.close();
-    if (notify) this.onDrop(wasHost, peer.id, wasPlaying);
+    // Allow the kick notice to reach the guest before closing the data channel.
+    if (reason === 'kicked' && !wasHost) setTimeout(() => peer.connection.close(), 1000);
+    else peer.connection.close();
+    if (notify) this.onDrop(wasHost, peer.id, wasPlaying, reason);
   }
 
   close() {
