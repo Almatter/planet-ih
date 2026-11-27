@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1c1713">
+  <title>Avatar Alignment Studio · Planet IH</title>
+  <link rel="preload" href="./assets/avatar-atlas.png?v=9" as="image">
+  <link rel="stylesheet" href="./style.css?v=10">
+  <link rel="stylesheet" href="./avatar-studio.css?v=12">
+  <script type="module" src="./avatar-studio.js?v=12"></script>
+</head>
+<body>
+  <main class="studio">
+    <header class="studio-header">
+      <div><a href="./">Planet IH</a><h1>Avatar Alignment Studio</h1></div>
+      <div class="studio-actions">
+        <input id="import-file" type="file" accept=".json,application/json" hidden>
+        <button id="import" type="button" disabled>Import layout</button>
+        <button id="export" class="primary" type="button" disabled>Export layout</button>
+      </div>
+    </header>
+    <p id="studio-status" role="status">Loading the published layout…</p>
+    <div class="studio-grid">
+      <section class="panel studio-stage" aria-label="Avatar preview">
+        <div class="stage-tools">
+          <div id="studio-angles" role="group" aria-label="Preview angle">
+            <button type="button" data-angle="south" aria-pressed="true">Front</button>
+            <button type="button" data-angle="west" aria-pressed="false">Left</button>
+            <button type="button" data-angle="east" aria-pressed="false">Right</button>
+            <button type="button" data-angle="north" aria-pressed="false">Back</button>
+          </div>
+          <div class="stage-options">
+            <label for="studio-pose">Pose</label>
+            <select id="studio-pose"><option value="0">Standing</option><option value="1">Step forward</option><option value="-1">Step back</option><option value="2">Long step</option></select>
+            <label for="studio-zoom">Zoom</label>
+            <select id="studio-zoom"><option value="0.5">50%</option><option value="0.75">75%</option><option value="1" selected>100%</option><option value="1.25">125%</option><option value="1.5">150%</option></select>
+          </div>
+        </div>
+        <canvas id="studio-canvas" width="720" height="630" tabindex="0" aria-label="Avatar alignment canvas" aria-describedby="canvas-help"></canvas>
+        <p id="canvas-help">Drag a part or use the arrow keys to nudge it. Hold Shift for larger steps.</p>
+      </section>
+      <section class="panel studio-layers" aria-labelledby="layer-title">
+        <h2 id="layer-title">Layers</h2>
+        <ul id="layer-list" aria-label="Layers from front to back"></ul>
+        <details class="studio-look">
+          <summary>Avatar to test</summary>
+          <div id="studio-avatar-fields"></div>
+        </details>
+      </section>
+      <section class="panel studio-inspector" aria-labelledby="part-title">
+        <div class="inspector-title"><h2 id="part-title">Head</h2><button id="undo" type="button" disabled>Undo</button></div>
+        <p id="part-art"></p>
+        <label for="edit-scope">Apply to</label>
+        <select id="edit-scope"><option value="art">This artwork or outfit</option><option value="angle">Every version of this part</option><option value="body">This artwork and body size</option></select>
+        <p id="scope-note"></p>
+        <div id="part-fields"></div>
+        <label class="studio-toggle"><input id="part-hidden" type="checkbox"> Hide this layer</label>
+        <div class="studio-button-row" aria-label="Nudge selected part">
+          <button type="button" data-nudge="-1,0" aria-label="Nudge left">←</button>
+          <button type="button" data-nudge="1,0" aria-label="Nudge right">→</button>
+          <button type="button" data-nudge="0,-1" aria-label="Nudge up">↑</button>
+          <button type="button" data-nudge="0,1" aria-label="Nudge down">↓</button>
+        </div>
+        <div class="studio-button-row">
+          <button id="send-back" type="button">Move back</button><button id="bring-forward" type="button">Move forward</button>
+        </div>
+        <button id="reset-part" class="wide" type="button">Reset selected adjustments</button>
+        <button id="published" class="wide" type="button" disabled>Load published layout</button>
+      </section>
+    </div>
+    <footer class="studio-footer">Export <code>avatar-layout.json</code> into the project root. Commit and publish it to apply the layout for everyone.</footer>
+  </main>
+</body>
+</html>

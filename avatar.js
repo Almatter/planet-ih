@@ -1,4 +1,5 @@
 import { avatarTiles } from './avatar-atlas.js?v=9';
+import { adjustedPlacement, emptyAvatarLayout, visiblePartRect } from './avatar-layout.js?v=12';
 
 const accessoryColors = { Ivory: '#e5d5b6', Gold: '#dcaa66', Chestnut: '#ac7255', Ebony: '#594957',
   Rose: '#d68b91', Teal: '#62aa99', Violet: '#a884bd' };
@@ -52,8 +53,20 @@ const eyeColors = { Hazel: '#946446', Blue: '#5896ce', Green: '#76a870', Violet:
 const dyes = { 'Moss green': '#8fbe76', Burgundy: '#cf6c88', Indigo: '#8b9ee2', Ochre: '#e7ab60' };
 const outfitTiles = { 'Traveler tunic': 'tunic', 'Tea house apron': 'apron', 'Scholar robe': 'robe', 'Knight armor': 'armor' };
 const hairTiles = { Cropped: 'cropped', 'Side fringe': 'fringe', Bob: 'bob', Braids: 'braids' };
+const layerOrders = { tail: 10, wings: 20, 'leg-left': 30, 'leg-far': 30, 'leg-right': 40, 'leg-near': 40,
+  'arm-left': 50, 'arm-far': 50, 'arm-right': 60, neck: 70, outfit: 80, 'arm-near': 90, 'hair-rear': 97,
+  ears: 100, head: 110, eyes: 120, nose: 130, mouth: 140, hair: 150, horns: 170 };
 const atlas = typeof Image === 'function' ? new Image() : null;
 const tintedTiles = new Map();
+let publishedLayout = emptyAvatarLayout;
+
+export function setPublishedAvatarLayout(layout) {
+  publishedLayout = layout;
+}
+
+export function avatarScale(avatar) {
+  return bodies[avatar.body].scale;
+}
 
 export const avatarArtReady = new Promise(resolve => {
   if (!atlas) {
@@ -110,83 +123,88 @@ function tintedTile(name, crop, color, layer) {
   return canvas;
 }
 
-function sprite(context, name, x, y, width, { height, tint, layer, flip = false, angle = 0, visibleFrom = 0 } = {}) {
+function sprite(context, part) {
+  const { name, x, y, width, height: drawHeight, tint, layer, flip = false, angle = 0, opacity = 1 } = part;
   const crop = avatarTiles[name];
-  if (!crop) return;
-  const drawHeight = height ?? width * crop[3] / crop[2];
   context.save();
+  context.globalAlpha *= opacity;
   context.translate(x, y);
   if (angle) context.rotate(angle);
-  if (flip) context.scale(-1, 1);
-  if (visibleFrom) {
+  if (part.visibleFrom || part.cropLeft || part.cropRight || part.cropBottom) {
+    const visible = visiblePartRect(part);
     context.beginPath();
-    context.rect(-width / 2, drawHeight * visibleFrom, width, drawHeight * (1 - visibleFrom));
+    context.rect(visible.left, visible.top, visible.width, visible.height);
     context.clip();
   }
+  if (flip) context.scale(-1, 1);
   if (tint) context.drawImage(tintedTile(name, crop, tint, layer), -width / 2, 0, width, drawHeight);
   else context.drawImage(atlas, ...crop, -width / 2, 0, width, drawHeight);
   context.restore();
 }
 
-function drawLeg(context, view, side, profile, phase) {
+function drawLeg(add, view, side, profile, phase) {
   const lift = Math.max(0, side * phase);
   const bent = profile && lift >= 1;
-  sprite(context, bent ? 'leg-bent' : `leg-${view}`, side * (profile ? 1.65 : 2.85), -11.6 - lift * 0.68, profile ? 6.1 : 5.5,
+  const id = profile ? (side < 0 ? 'leg-far' : 'leg-near') : (side < 0 ? 'leg-left' : 'leg-right');
+  add(id, bent ? 'leg-bent' : `leg-${view}`, side * (profile ? 1.65 : 2.85), -11.6 - lift * 0.68, profile ? 6.1 : 5.5,
     { height: 11.6, flip: bent || (!profile && side < 0), angle: side * phase * (profile ? 0.13 : 0.036) });
 }
 
-function drawArm(context, view, x, swing, bob, skin, foreground = false) {
+function drawArm(add, view, x, swing, bob, skin, foreground = false) {
   const profile = view === 'side';
-  sprite(context, profile && foreground && swing > 1 ? 'arm-bent' : `arm-${view}`, x, -17.7 - bob, profile ? 4.75 : 4.3,
+  const id = profile ? (foreground ? 'arm-near' : 'arm-far') : (x < 0 ? 'arm-left' : 'arm-right');
+  add(id, profile && foreground && swing > 1 ? 'arm-bent' : `arm-${view}`, x, -17.7 - bob, profile ? 4.75 : 4.3,
     { height: 10.8, tint: skin, layer: 'sleeve', flip: !profile && x > 0,
       angle: swing * 0.1, visibleFrom: foreground ? 0.46 : 0 });
 }
 
-function drawTail(context, avatar, view, stride) {
+function drawTail(add, avatar, view, stride) {
   if (avatar.tail === 'None') return;
   // Both painted tails have their root on the left. Reverse the profile so the root meets the back hip.
   const profile = view === 'side';
   const back = view === 'back';
-  sprite(context, avatar.tail === 'Cat' ? 'tail-cat' : 'tail-dragon', profile ? -9.7 : back ? 6.5 : 9.7,
+  add('tail', avatar.tail === 'Cat' ? 'tail-cat' : 'tail-dragon', profile ? -9.7 : back ? 6.5 : 9.7,
     (back ? -14.9 : -19.4) + stride * 0.32, back ? 13.5 : 15,
     { height: back ? 9.8 : 10.5, flip: profile, tint: accessoryColors[avatar.tailColor] });
 }
 
-function drawFeatures(context, avatar, view, head, bob, skin) {
+function drawFeatures(add, avatar, view, head, bob, skin) {
   const profile = view === 'side';
   const center = profile ? 1.9 : 0;
   const earTint = accessoryColors[avatar.earColor];
   if (avatar.ears !== 'Cat') {
     const ears = profile && avatar.ears === 'Elf' ? 'ear-side' : avatar.ears === 'Elf' ? 'ears-elf' : 'ears-round';
     const single = ears === 'ear-side';
-    sprite(context, ears, single ? -head / 2 + 0.5 : 0, -25.3 - bob, single ? 5.1 : head + (avatar.ears === 'Elf' ? 5.2 : 3.5),
+    add('ears', ears, single ? -head / 2 + 0.5 : 0, -25.3 - bob, single ? 5.1 : head + (avatar.ears === 'Elf' ? 5.2 : 3.5),
       { tint: earTint ?? skin, height: avatar.ears === 'Elf' ? 6.4 : 5.35 });
   }
-  sprite(context, `head-${view}`, 0, -31 - bob, head, { height: 12.8, tint: skin });
+  add('head', `head-${view}`, 0, -31 - bob, head, { height: 12.8, tint: skin });
   if (view !== 'back') {
-    sprite(context, profile ? 'eye-side' : 'eyes-front', center, -25.1 - bob, profile ? 4.2 : head * 0.69,
+    add('eyes', profile ? 'eye-side' : 'eyes-front', center, -25.1 - bob, profile ? 4.2 : head * 0.69,
       { height: 3.05, tint: eyeColors[avatar.eyes], layer: 'eyes' });
     const nose = avatar.nose === 'Broad' ? 'nose-broad' : 'nose';
-    sprite(context, nose, center + (profile ? 1.65 : 0), -22.85 - bob, avatar.nose === 'Straight' ? 0.98 : 1.4,
+    add('nose', nose, center + (profile ? 1.65 : 0), -22.85 - bob, avatar.nose === 'Straight' ? 0.98 : 1.4,
       { height: avatar.nose === 'Straight' ? 2.05 : 1.42, tint: skin });
     const mouth = { Smile: 'mouth-smile', Quiet: 'mouth-quiet', Fang: 'mouth-fang' }[avatar.mouth];
-    sprite(context, mouth, center + (profile ? 0.75 : 0), -20.95 - bob, profile ? 2.45 : 3.35,
+    add('mouth', mouth, center + (profile ? 0.75 : 0), -20.95 - bob, profile ? 2.45 : 3.35,
       { tint: lipColors[avatar.lipColor], layer: 'lips' });
   }
-  if (avatar.hair !== 'Shaved') sprite(context, `${hairTiles[avatar.hair]}-${view}`, 0, -33 - bob, head + 3.6,
-    { tint: hairColors[avatar.hairColor] });
-  if (avatar.ears === 'Cat') sprite(context, 'ears-cat', 0, -35.4 - bob, head + 1.4, { height: 8.3, tint: earTint ?? hairColors[avatar.hairColor] });
+  if (avatar.hair !== 'Shaved') {
+    const hair = `${hairTiles[avatar.hair]}-${view}`;
+    const tint = hairColors[avatar.hairColor];
+    add('hair-rear', hair, 0, -33 - bob, head + 3.6, { tint, hidden: true });
+    add('hair', hair, 0, -33 - bob, head + 3.6, { tint });
+  }
+  if (avatar.ears === 'Cat') add('ears', 'ears-cat', 0, -35.4 - bob, head + 1.4, { height: 8.3, tint: earTint ?? hairColors[avatar.hairColor] });
   if (avatar.horns !== 'None') {
     const antlers = avatar.horns === 'Antlers';
-    sprite(context, antlers ? 'antlers' : 'horns', 0, (antlers ? -40.6 : -35.6) - bob, head + (antlers ? 4.8 : 3.8),
+    add('horns', antlers ? 'antlers' : 'horns', 0, (antlers ? -40.6 : -35.6) - bob, head + (antlers ? 4.8 : 3.8),
       { height: antlers ? 12.8 : 8.5, tint: accessoryColors[avatar.hornColor] });
   }
 }
 
-export function drawAvatar(context, avatar, color, x, y, direction = 'south', phase = 0, previewScale = 1) {
-  if (!atlas?.naturalWidth) return;
+export function avatarParts(avatar, color, direction = 'south', phase = 0, layout = publishedLayout) {
   const body = bodies[avatar.body];
-  const scale = body.scale * previewScale;
   const skin = complexions[avatar.skin];
   const view = direction === 'north' ? 'back' : direction === 'south' ? 'front' : 'side';
   const profile = view === 'side';
@@ -198,35 +216,54 @@ export function drawAvatar(context, avatar, color, x, y, direction = 'south', ph
   const torsoTint = avatar.dye === 'Room color' ? color : dyes[avatar.dye];
   const wings = avatar.wings === 'Bat' ? 'wings-bat' : 'wings-feathered';
   const wingTint = accessoryColors[avatar.wingColor];
+  const parts = [];
+  const add = (id, name, x, y, width, options = {}) => {
+    const crop = avatarTiles[name];
+    const height = options.height ?? width * crop[3] / crop[2];
+    const variant = id.startsWith('arm-') || id === 'neck' ? `${view}:${outfitTiles[avatar.outfit]}` : id.startsWith('leg-') ? view : name;
+    const order = view === 'back' && id === 'tail' ? 92 : view === 'back' && id === 'wings' ? 96 :
+      name === 'ears-cat' ? 160 : layerOrders[id];
+    const part = { ...options, id, name, variant, x, y, width, height, order };
+    parts.push(adjustedPlacement(part, avatar, direction, layout));
+  };
 
+  if (view !== 'back') drawTail(add, avatar, view, stride);
+  if (avatar.wings !== 'None' && view !== 'back') add('wings', wings,
+    profile ? -3.5 : 0, -23.5 - bob, profile ? 27 : 33, { height: 15.5, tint: wingTint });
+
+  drawLeg(add, view, -1, profile, stride);
+  drawLeg(add, view, 1, profile, stride);
+  if (profile) drawArm(add, view, torsoWidth * 0.14, -stride, bob, skin);
+  else {
+    const sleeve = torsoWidth * 0.34;
+    drawArm(add, view, -sleeve, -stride, bob, skin);
+    drawArm(add, view, sleeve, stride, bob, skin);
+  }
+  add('neck', 'neck', 0, -21.7 - bob, 6.2, { height: 4.6, tint: skin });
+  add('outfit', torso, 0, -19.6 - bob, torsoWidth,
+    { height: avatar.outfit === 'Scholar robe' ? 16 : 14.2, tint: torsoTint, layer: 'cloth' });
+  if (profile) drawArm(add, view, -torsoWidth * 0.24, stride, bob, skin, true);
+  if (view === 'back') drawTail(add, avatar, view, stride);
+  if (avatar.wings !== 'None' && view === 'back') add('wings', wings,
+    0, -22.8 - bob, 30.5, { height: 14.2, tint: wingTint });
+  drawFeatures(add, avatar, view, body.head * 2 + 1.7, bob, skin);
+  return parts.sort((a, b) => a.order - b.order);
+}
+
+export function drawAvatar(context, avatar, color, x, y, direction = 'south', phase = 0, previewScale = 1, placements) {
+  if (!atlas?.naturalWidth) return;
+  const scale = avatarScale(avatar) * previewScale;
+  const profile = direction === 'east' || direction === 'west';
   context.save();
   context.translate(x, y);
   context.scale(direction === 'west' ? -scale : scale, scale);
   context.fillStyle = '#23151d58';
   context.beginPath();
-  context.ellipse(0, 0.35, shoulders + 2.25, 2.3, 0, 0, Math.PI * 2);
+  context.ellipse(0, 0.35, bodies[avatar.body].shoulder + 2.25 - Number(profile) * 0.75, 2.3, 0, 0, Math.PI * 2);
   context.fill();
-
-  if (view !== 'back') drawTail(context, avatar, view, stride);
-  if (avatar.wings !== 'None' && view !== 'back') sprite(context, wings,
-    profile ? -3.5 : 0, -23.5 - bob, profile ? 27 : 33, { height: 15.5, tint: wingTint });
-
-  drawLeg(context, view, -1, profile, stride);
-  drawLeg(context, view, 1, profile, stride);
-  if (profile) drawArm(context, view, torsoWidth * 0.14, -stride, bob, skin);
-  else {
-    const sleeve = torsoWidth * 0.34;
-    drawArm(context, view, -sleeve, -stride, bob, skin);
-    drawArm(context, view, sleeve, stride, bob, skin);
+  for (const part of placements ?? avatarParts(avatar, color, direction, phase)) {
+    if (!part.hidden && part.opacity) sprite(context, part);
   }
-  sprite(context, 'neck', 0, -21.7 - bob, 6.2, { height: 4.6, tint: skin });
-  sprite(context, torso, 0, -19.6 - bob, torsoWidth,
-    { height: avatar.outfit === 'Scholar robe' ? 16 : 14.2, tint: torsoTint, layer: 'cloth' });
-  if (profile) drawArm(context, view, -torsoWidth * 0.24, stride, bob, skin, true);
-  if (view === 'back') drawTail(context, avatar, view, stride);
-  if (avatar.wings !== 'None' && view === 'back') sprite(context, wings,
-    0, -22.8 - bob, 30.5, { height: 14.2, tint: wingTint });
-  drawFeatures(context, avatar, view, body.head * 2 + 1.7, bob, skin);
   context.restore();
 }
 

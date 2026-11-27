@@ -4,6 +4,14 @@ Planet IH is a browser multiplayer prototype for [Isekai Hell](https://github.co
 
 Avatars use painted anime-style layers. Outfit dye, skin, eyes, hair, ears, horns, tails, wings, and lips have separate color controls. The preview shows your choices from the front, left, right, and back.
 
+## Align avatar artwork
+
+Open **Customize avatar → Open alignment editor** or visit `avatar-studio.html`. Choose a view, pose, and test outfit. Select a part in **Layers**, then drag it, nudge it with the arrow keys, or enter the offsets. A higher draw order places a part in front. Adjustments can apply across all versions of a part in that view, to matching artwork or outfit, or to a specific body size as well.
+
+The editor saves a draft in your browser. **Export layout** downloads `avatar-layout.json`. Replace the file in the repository root, commit it, and push it to the publishing branch. The game and its customizer both load that layout. The editor can also import the file to continue work on a draft.
+
+For hair that straddles the face, unhide **Rear hair** to position a copy behind the head. Use the clip fields to trim the front **Hair** layer to the fringe you want to keep.
+
 ## Join a room
 
 1. On the game page, enter a display name and choose **Host room**, then **Create invite**.

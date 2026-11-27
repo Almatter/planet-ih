@@ -1,5 +1,6 @@
-import { Room, capacity, chatLimit, maxMuteSeconds, cleanName, colors, width, height, position } from './room.js?v=10';
-import { avatarArtReady, avatarBounds, avatarOptions, cleanAvatar, drawAvatar, walkPose } from './avatar.js?v=10';
+import { Room, capacity, chatLimit, maxMuteSeconds, cleanName, colors, width, height, position } from './room.js?v=12';
+import { avatarArtReady, avatarBounds, avatarOptions, cleanAvatar, drawAvatar, setPublishedAvatarLayout, walkPose } from './avatar.js?v=12';
+import { loadAvatarLayout } from './avatar-layout.js?v=12';
 import { backdrops, defaultAmbience, tracks } from './ambience.js';
 import { RoomAudio } from './room-audio.js';
 
@@ -100,6 +101,10 @@ void avatarArtReady.then(loaded => {
   if (loaded) updateAvatarPreview();
   else setStatus('The avatar art could not load. Refresh to try again.');
 });
+void loadAvatarLayout().then(layout => {
+  setPublishedAvatarLayout(layout);
+  updateAvatarPreview();
+}).catch(error => console.warn(error.message));
 
 function setPreference(input, fallback) {
   const key = `planet-ih-${input.id}`;
