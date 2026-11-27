@@ -21,6 +21,8 @@ const chatLog = byId('chat-log');
 const chatNotice = byId('chat-notice');
 const chatEnd = byId('chat-end');
 const avatarEditor = byId('avatar-editor');
+const shareReply = byId('share-reply');
+const joinDraftKey = 'planet-ih-join-draft';
 const preview = byId('avatar-preview');
 const previewContext = preview.getContext('2d');
 const previewAngles = document.querySelectorAll('[data-angle]');
@@ -370,8 +372,28 @@ function clearInvite() {
   byId('invite').disabled = false;
 }
 
-function reset(message) {
+function readJoinDraft() {
+  try {
+    const draft = JSON.parse(sessionStorage.getItem(joinDraftKey));
+    if (typeof draft?.invite === 'string' && draft.invite.trim()) return draft;
+  } catch {
+    // The browser may disallow tab storage.
+  }
+  return null;
+}
+
+function saveJoinDraft(draft) {
+  try {
+    if (draft) sessionStorage.setItem(joinDraftKey, JSON.stringify(draft));
+    else sessionStorage.removeItem(joinDraftKey);
+  } catch {
+    // Joining still works while the original page is running.
+  }
+}
+
+function reset(message, draft = null) {
   room?.close();
+  saveJoinDraft(draft);
   if (muteDialog.open) muteDialog.close();
   destination = undefined;
   poses.clear();
@@ -385,6 +407,7 @@ function reset(message) {
   const local = { id: 'local', name: cleanName(nameInput.value) || 'Traveler', color: colors[0], avatar: playerAvatar, x: width / 2, y: height / 2 };
   room = new Room(local, joined => {
     if (joined && mode === 'join') {
+      saveJoinDraft(null);
       setMode('guest');
       setStatus('Connected to the room.');
     } else if (joined && mode === 'host') {
@@ -395,7 +418,12 @@ function reset(message) {
   }, (lostHost, id, wasPlaying, reason) => {
     if (lostHost) {
       if (reason === 'kicked') reset('The host removed you from the room.');
-      else reset(wasPlaying ? 'The connection to the host ended.' : 'The browser could not connect to the host. Return to the game and ask for a fresh invite.');
+      else if (!wasPlaying && mode === 'join') {
+        recoverJoin({
+          invite: byId('offer-in').value,
+          replyGenerated: Boolean(byId('reply-code').value),
+        }, 'The connection attempt ended.');
+      } else reset('The connection to the host ended.');
       return;
     }
     if (id === inviteId) clearInvite();
@@ -418,13 +446,24 @@ function reset(message) {
   renderRoster();
 }
 
-function showJoin(invite = '') {
+function showJoin(invite = '', fromLink = false) {
   byId('offer-in').value = invite;
-  byId('offer-entry').hidden = Boolean(invite);
-  byId('browser-invite-fallback').value = invite ? inviteUrl(invite) : '';
+  byId('offer-entry').hidden = fromLink;
+  byId('browser-invite-fallback').value = fromLink ? inviteUrl(invite) : '';
   byId('browser-invite-fallback').hidden = true;
   setMode('join');
   setStatus(invite ? 'Choose a name and avatar, then generate a reply.' : 'Paste an invite link or code from the host to join.');
+}
+
+function recoverJoin(draft, message) {
+  reset(message, draft);
+  showJoin(draft.invite);
+  if (draft.replyGenerated) {
+    byId('reply').textContent = 'Generate new reply';
+    setStatus(`${message} The previous reply won’t reconnect. If your host already entered it, ask them for a fresh invite and paste it here. Otherwise, generate a new reply for this invite.`);
+  } else {
+    setStatus(`${message} Your invite is still here. Generate a reply when you’re ready.`);
+  }
 }
 
 function inviteUrl(token) {
@@ -500,28 +539,49 @@ byId('accept').addEventListener('click', async () => {
 
 byId('reply').addEventListener('click', async () => {
   const activeRoom = room;
+  const invite = byId('offer-in').value.trim();
+  if (!invite) {
+    setStatus('Paste the host’s invite link or code before generating a reply.');
+    return;
+  }
   nameInput.blur();
   byId('offer-in').blur();
   byId('reply').disabled = true;
   byId('offer-in').readOnly = true;
   byId('reply').textContent = 'Generating reply…';
   setMode('join');
+  saveJoinDraft({ invite, replyGenerated: false });
   setStatus('Preparing your reply. This can take a few seconds.');
   try {
-    const token = await activeRoom.answer(byId('offer-in').value);
+    const token = await activeRoom.answer(invite);
     if (room !== activeRoom || mode !== 'join') return;
     byId('reply-code').value = token;
+    saveJoinDraft({ invite, replyGenerated: true });
     byId('answer').hidden = false;
     byId('reply').hidden = true;
-    setStatus('Copy the reply, send it to the host, then come back to this tab.');
+    setStatus('Send the reply to the host, then return here and wait for them to connect you.');
   } catch (error) {
     if (room !== activeRoom) return;
+    saveJoinDraft(null);
     byId('reply').disabled = false;
     byId('offer-in').readOnly = false;
     setMode('join');
     setStatus(error.message);
   } finally {
     if (activeRoom === room) byId('reply').textContent = 'Generate reply';
+  }
+});
+
+shareReply.hidden = typeof navigator.share !== 'function';
+shareReply.addEventListener('click', async () => {
+  const activeRoom = room;
+  try {
+    await navigator.share({ text: byId('reply-code').value });
+    if (room === activeRoom && mode === 'join') setStatus('Return to this tab and wait for the host to connect you.');
+  } catch (error) {
+    if (error.name !== 'AbortError' && room === activeRoom && mode === 'join') {
+      setStatus('Sharing is unavailable. Use Copy reply code to send it to the host.');
+    }
   }
 });
 
@@ -564,12 +624,12 @@ canvas.addEventListener('click', event => {
   destination = position((event.clientX - bounds.left) * width / bounds.width, (event.clientY - bounds.top) * height / bounds.height);
 });
 addEventListener('blur', () => keys.clear());
-addEventListener('pagehide', () => {
+addEventListener('pagehide', event => {
   audio.setTrack('none');
-  room.close();
+  if (!event.persisted) room.close();
 });
 addEventListener('pageshow', event => {
-  if (event.persisted) reset('Play solo or invite friends to share the field.');
+  if (event.persisted) updateAmbience(room.ambience);
 });
 
 function move(active, seconds) {
@@ -685,13 +745,18 @@ function drawOverlays(players, fontSize, now) {
   }
 }
 
-reset('Play solo or invite friends to share the field.');
+const savedJoin = readJoinDraft();
+if (savedJoin) recoverJoin(savedJoin, 'The browser reloaded the game.');
+else reset('Play solo or invite friends to share the field.');
 function openInviteFromUrl() {
   const fragment = location.hash.slice(1);
   const incoming = /^[Ii]\./.test(fragment) ? fragment : new URLSearchParams(fragment).get('invite');
   if (!incoming) return;
   history.replaceState(null, '', location.pathname + location.search);
-  if (mode === 'solo' || (mode === 'join' && !byId('reply').disabled)) showJoin(incoming);
+  if (mode === 'solo' || (mode === 'join' && !byId('reply').disabled)) {
+    saveJoinDraft({ invite: incoming, replyGenerated: false });
+    showJoin(incoming, true);
+  }
   else setStatus('Open this invite in a new tab or leave the current room first.');
 }
 openInviteFromUrl();

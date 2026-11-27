@@ -23,6 +23,8 @@ For hair that straddles the face, unhide **Rear hair** to position a copy behind
 
 Use **Copy Discord invite code** to send a code block that your friend can paste into **Join room** in their browser. **Copy Discord reply** also formats the reply as a code block. Both fields accept the code by itself or with the surrounding backticks. If a link opens inside Discord or another app, select **Copy invite for browser** and paste it into your usual browser’s address bar before generating a reply.
 
+On phones with a share sheet, use **Share reply** and choose the chat app if it appears. If the browser reloads the game, Planet IH restores the invite in the same tab. Generate a replacement reply if the host hasn’t entered the old one. Otherwise, the host can cancel that connection and create a new invite without closing the room.
+
 Room chat allows up to 100 characters per message. New messages appear in speech bubbles beside players for a few seconds. The fixed-height history scrolls, is available to later arrivals, and clears when the room closes. The host can **Mute** a guest for a specified duration or **Kick** them. A muted guest can keep playing and reading chat, and can see how long remains on their mute.
 
 The host chooses the shared room background and music. Each player controls **Play music** and **Chat sound** for their own browser. New messages you miss show an unread count, which you can tap to jump to chat.
